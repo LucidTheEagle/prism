@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(arrayBuffer)
 
     // Upload to Supabase Storage
-    const { error: uploadError } = await supabaseAdmin.storage
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from('document-uploads')
       .upload(filename, buffer, {
         contentType: 'application/pdf',
@@ -72,19 +72,20 @@ export async function POST(request: NextRequest) {
       throw new Error('Failed to create document record')
     }
 
-    // Trigger ingestion in background (will build in Phase 2)
-    // For now, just mark as ready after a delay
-    setTimeout(async () => {
-      try {
-        await supabaseAdmin
-          .from('documents')
-          .update({ status: 'ready' })
-          .eq('id', document.id)
-        console.log(`Document ${document.id} marked as ready`)
-      } catch (error) {
-        console.error('Error updating status:', error)
-      }
-    }, 5000) // 5 seconds delay for demo
+    // Trigger AI ingestion immediately (server-side, not background)
+    console.log(`Triggering ingestion for document ${document.id}`)
+    
+    // Call ingestion API (same server, internal)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    
+    // Don't await - let it run in background
+    fetch(`${baseUrl}/api/ingest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documentId: document.id })
+    }).catch(err => {
+      console.error('Failed to trigger ingestion:', err)
+    })
 
     console.log('Upload successful:', {
       documentId: document.id,
@@ -96,18 +97,22 @@ export async function POST(request: NextRequest) {
       success: true,
       documentId: document.id,
       fileUrl: publicUrl,
-      message: 'Upload successful! Processing will begin in Phase 2.'
+      message: 'Upload successful! AI processing started.'
     })
 
   } catch (error: unknown) {
-    console.error('Upload error:', error);
-    let errorMessage = 'Upload failed';
     if (error instanceof Error) {
-      errorMessage = error.message;
+      console.error('Upload error:', error)
+      return NextResponse.json(
+        { error: error.message || 'Upload failed' },
+        { status: 500 }
+      )
+    } else {
+      console.error('Upload error:', error)
+      return NextResponse.json(
+        { error: 'Upload failed' },
+        { status: 500 }
+      )
     }
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
   }
 }
