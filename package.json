@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@langchain/openai": "^1.2.5",
+    "@langchain/textsplitters": "^1.0.1",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",
     "class-variance-authority": "^0.7.1",
