@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { analyzeDocument, detectDocumentType } from '@/lib/openai/documentAnalyzer'
 import { extractPDFText } from '@/lib/pdfParser'
+import { 
+  chunkDocument, 
+  storeChunksInDatabase, 
+  validateChunks, 
+  getChunkingStats 
+} from '@/lib/ai/adaptive-chunking'
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
@@ -103,11 +109,40 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Ingestion] Document metadata updated`)
 
-    // 7. TODO: Chunking (Checkpoint 2.2)
+    // =========================================================================
+    // 7. CHECKPOINT 2.2: ADAPTIVE CHUNKING
+    // =========================================================================
+    console.log(`[Ingestion] 📄 Starting adaptive chunking...`)
+    
+    const chunks = await chunkDocument({
+      optimal_chunk_size: analysis.optimal_chunk_size,
+      overlap: 100, // 100 tokens overlap
+      document_id: documentId,
+      full_text: fullText,
+      page_count: numPages,
+      section_headers: analysis.section_headers,
+    })
+
+    // Validate chunks
+    const validation = validateChunks(chunks)
+    if (!validation.valid) {
+      console.error('[Ingestion] Chunk validation failed:', validation.errors)
+      throw new Error(`Chunking failed: ${validation.errors.join(', ')}`)
+    }
+
+    // Get stats
+    const stats = getChunkingStats(chunks)
+    console.log(`[Ingestion] Chunking stats:`, stats)
+
+    // Store chunks in database
+    await storeChunksInDatabase(documentId, chunks)
+
+    console.log(`[Ingestion] ✅ Chunking complete: ${chunks.length} chunks created`)
+
     // 8. TODO: Embeddings (Checkpoint 2.3)
     // 9. TODO: Metadata Enrichment (Checkpoint 2.4)
 
-    // For now, mark as ready
+    // Mark document as ready
     console.log(`[Ingestion] Marking document as ready...`)
     await supabaseAdmin
       .from('documents')
@@ -123,16 +158,26 @@ export async function POST(request: NextRequest) {
       analysis,
       pageCount: numPages,
       textLength: fullText.length,
+      chunking: {
+        chunks_created: chunks.length,
+        stats,
+      },
       duration,
-      message: 'Document analyzed successfully! (Chunking & embeddings coming in next checkpoints)'
+      message: 'Document chunked successfully! (Embeddings coming in Checkpoint 2.3)'
     })
 
   } catch (error: unknown) {
     console.error('[Ingestion] ❌ Error:', error)
 
-    // Update document status to failed
+    // Rollback: Delete any chunks that were created
     if (documentId) {
       try {
+        console.log('[Ingestion] Rolling back chunks...')
+        await supabaseAdmin
+          .from('document_chunks')
+          .delete()
+          .eq('document_id', documentId)
+
         await supabaseAdmin
           .from('documents')
           .update({
@@ -141,7 +186,7 @@ export async function POST(request: NextRequest) {
           })
           .eq('id', documentId)
       } catch (updateError) {
-        console.error('[Ingestion] Failed to update error status:', updateError)
+        console.error('[Ingestion] Rollback failed:', updateError)
       }
     }
 
