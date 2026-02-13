@@ -8,6 +8,7 @@ import {
   validateChunks, 
   getChunkingStats 
 } from '@/lib/ai/adaptive-chunking'
+import { generateDocumentEmbeddings } from '@/lib/openai/embeddings'
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
@@ -139,7 +140,25 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Ingestion] ✅ Chunking complete: ${chunks.length} chunks created`)
 
-    // 8. TODO: Embeddings (Checkpoint 2.3)
+    // =========================================================================
+    // 8. CHECKPOINT 2.3: EMBEDDING GENERATION
+    // =========================================================================
+    console.log(`[Ingestion] 🧠 Starting embedding generation...`)
+    
+    const embeddingStats = await generateDocumentEmbeddings(documentId)
+    
+    console.log(`[Ingestion] ✅ Embeddings complete:`, {
+      successful: embeddingStats.successful_embeddings,
+      failed: embeddingStats.failed_embeddings,
+      cost: `$${embeddingStats.estimated_cost.toFixed(6)}`,
+      time: `${(embeddingStats.processing_time_ms / 1000).toFixed(2)}s`
+    })
+
+    // Check if all embeddings succeeded
+    if (embeddingStats.failed_embeddings > 0) {
+      console.warn(`[Ingestion] ⚠️ ${embeddingStats.failed_embeddings} embeddings failed`)
+    }
+
     // 9. TODO: Metadata Enrichment (Checkpoint 2.4)
 
     // Mark document as ready
@@ -162,8 +181,15 @@ export async function POST(request: NextRequest) {
         chunks_created: chunks.length,
         stats,
       },
+      embeddings: {
+        successful: embeddingStats.successful_embeddings,
+        failed: embeddingStats.failed_embeddings,
+        tokens_used: embeddingStats.total_tokens,
+        estimated_cost: embeddingStats.estimated_cost,
+        processing_time_ms: embeddingStats.processing_time_ms,
+      },
       duration,
-      message: 'Document chunked successfully! (Embeddings coming in Checkpoint 2.3)'
+      message: 'Document processed successfully! Ready for search.'
     })
 
   } catch (error: unknown) {
