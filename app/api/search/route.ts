@@ -6,6 +6,7 @@ import {
   calculateSearchMetrics,
   deduplicateResults 
 } from '@/lib/ai/hybrid-search'
+import { rerankSearchResults } from '@/lib/ai/reranking'
 import type { SearchResponse } from '@/lib/types'
 
 /**
@@ -83,11 +84,22 @@ export async function POST(request: NextRequest) {
     console.log(`✓ Search complete: ${searchResults.length} results`)
 
     // Step 4: Deduplicate and finalize results
-    console.log('\n[Step 3/3] Finalizing results...')
+    console.log('\n[Step 3/4] Deduplicating results...')
     searchResults = deduplicateResults(searchResults)
     console.log(`✓ After deduplication: ${searchResults.length} unique results`)
 
-    // Calculate metrics
+    // Step 5: AI Re-Ranking
+    console.log('\n[Step 4/4] AI-powered re-ranking...')
+    const rerankingResult = await rerankSearchResults(query, searchResults, 10)
+    searchResults = rerankingResult.reranked_results
+    console.log(`✓ Re-ranking complete: ${rerankingResult.scores.length} results scored`)
+    if (rerankingResult.scores.length > 0) {
+      const topScore = rerankingResult.scores[0]
+      console.log(`  Top result relevance: ${(topScore.relevance_score * 100).toFixed(0)}%`)
+      console.log(`  Re-ranking cost: $${rerankingResult.cost_estimate.toFixed(6)}`)
+    }
+
+    // Calculate final metrics
     const metrics = calculateSearchMetrics(searchResults)
     console.log(`\nSearch Quality Metrics:`)
     console.log(`  Avg combined score: ${metrics.avg_combined_score.toFixed(3)}`)
