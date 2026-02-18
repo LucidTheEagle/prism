@@ -4,6 +4,13 @@
    PRISM Design System - Tailwind v4
    ============================================================================= */
 
+/*
+ * Dark mode variant — Tailwind v4 syntax.
+ * Targets any element that is a descendant of .dark on <html>.
+ * next-themes toggles this class automatically.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   /* PRISM Custom Colors */
   --color-prism-trust-high: #10b981;      /* emerald-500 */
@@ -46,14 +53,100 @@
   --color-rose-700: #be123c;
 }
 
+/* =============================================================================
+   Shadcn CSS Variables — Light & Dark
+   Required because components.json has "cssVariables": true.
+   Without this block, bg-card, bg-background, text-muted-foreground, etc.
+   resolve to nothing. Dark mode overrides live in .dark selector.
+   ============================================================================= */
+
+:root {
+  /* Base */
+  --background: #f8fafc;        /* slate-50 */
+  --foreground: #0f172a;        /* slate-900 */
+
+  /* Card */
+  --card: #ffffff;
+  --card-foreground: #0f172a;   /* slate-900 */
+
+  /* Popover */
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+
+  /* Primary — Emerald */
+  --primary: #059669;           /* emerald-600 */
+  --primary-foreground: #ffffff;
+
+  /* Secondary */
+  --secondary: #f1f5f9;         /* slate-100 */
+  --secondary-foreground: #0f172a;
+
+  /* Muted */
+  --muted: #f1f5f9;             /* slate-100 */
+  --muted-foreground: #64748b;  /* slate-500 */
+
+  /* Accent */
+  --accent: #f1f5f9;            /* slate-100 */
+  --accent-foreground: #0f172a;
+
+  /* Destructive */
+  --destructive: #e11d48;       /* rose-600 */
+
+  /* Border / Input / Ring */
+  --border: #e2e8f0;            /* slate-200 */
+  --input: #e2e8f0;             /* slate-200 */
+  --ring: #059669;              /* emerald-600 */
+
+  /* Radius */
+  --radius: 0.5rem;
+}
+
+.dark {
+  /* Base */
+  --background: #0f172a;        /* slate-900 */
+  --foreground: #f8fafc;        /* slate-50 */
+
+  /* Card */
+  --card: #1e293b;              /* slate-800 */
+  --card-foreground: #f8fafc;   /* slate-50 */
+
+  /* Popover */
+  --popover: #1e293b;
+  --popover-foreground: #f8fafc;
+
+  /* Primary — Emerald (slightly lighter for dark bg) */
+  --primary: #10b981;           /* emerald-500 */
+  --primary-foreground: #ffffff;
+
+  /* Secondary */
+  --secondary: #1e293b;         /* slate-800 */
+  --secondary-foreground: #f8fafc;
+
+  /* Muted */
+  --muted: #1e293b;             /* slate-800 */
+  --muted-foreground: #94a3b8;  /* slate-400 */
+
+  /* Accent */
+  --accent: #1e293b;            /* slate-800 */
+  --accent-foreground: #f8fafc;
+
+  /* Destructive */
+  --destructive: #f43f5e;       /* rose-500 */
+
+  /* Border / Input / Ring */
+  --border: #334155;            /* slate-700 */
+  --input: #334155;             /* slate-700 */
+  --ring: #10b981;              /* emerald-500 */
+}
+
 @layer base {
   * {
     border-color: theme('colors.slate.200');
   }
 
   body {
-    background-color: theme('colors.slate.50');
-    color: theme('colors.slate.900');
+    background-color: var(--background);
+    color: var(--foreground);
     font-family: system-ui, -apple-system, sans-serif;
   }
 }
