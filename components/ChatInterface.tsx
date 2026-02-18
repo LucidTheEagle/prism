@@ -48,7 +48,7 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!input.trim() || isLoading) return
 
     const userMessage: Message = {
@@ -113,9 +113,23 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-white">
-      {/* SINGLE HEADER - Fixed at top */}
-      <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-3">
+    /*
+     * ROOT: h-full (not h-screen)
+     *
+     * The viewport lock (h-screen overflow-hidden) now lives in
+     * app/chat/layout.tsx. This component inherits that height via
+     * h-full. Using h-screen here would create a double-declaration
+     * that can cause the component to overflow its parent by 100vh.
+     *
+     * The three-zone flex column below is the only scroll architecture:
+     *   [1] Header       — shrink-0, never scrolls
+     *   [2] Messages     — flex-1 overflow-y-auto, the ONE scrollbar
+     *   [3] Input bar    — shrink-0, never scrolls
+     */
+    <div className="h-full flex flex-col overflow-hidden bg-white">
+
+      {/* ── ZONE 1: HEADER ─────────────────────────────────────────── */}
+      <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-3 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
@@ -125,14 +139,12 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
             >
               <ArrowLeft className="w-5 h-5 text-slate-600" />
             </button>
-            
+
             <div className="flex items-center gap-3">
               <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg">
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
-              <div>
-                <h1 className="text-lg font-bold text-slate-900">PRISM</h1>
-              </div>
+              <h1 className="text-lg font-bold text-slate-900">PRISM</h1>
             </div>
 
             {documentName && (
@@ -153,9 +165,17 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
         </div>
       </div>
 
-      {/* MESSAGES AREA - Scrollable */}
+      {/* ── ZONE 2: MESSAGES ───────────────────────────────────────── */}
+      {/*
+       * This is the ONE and ONLY scrollable region in the entire app
+       * when on the chat route. flex-1 fills remaining height between
+       * the header and input bar. overflow-y-auto adds a scrollbar only
+       * when content exceeds the available height.
+       */}
       <div className="flex-1 overflow-y-auto bg-slate-50">
         <div className="max-w-4xl mx-auto px-4 py-6">
+
+          {/* Empty state + suggested questions — hidden after first message */}
           {messages.length === 0 && (
             <div className="text-center py-12">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-emerald-100 to-emerald-200 rounded-full mb-6">
@@ -167,8 +187,7 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
               <p className="text-slate-600 max-w-md mx-auto mb-8">
                 Get instant answers with citations and confidence scores
               </p>
-              
-              {/* Suggested questions */}
+
               <div className="grid gap-3 max-w-2xl mx-auto">
                 <button
                   onClick={() => setInput('What are the key terms of this document?')}
@@ -192,7 +211,7 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
             </div>
           )}
 
-          {/* Messages */}
+          {/* Message thread */}
           <div className="space-y-6">
             {messages.map((message) => (
               <div
@@ -259,8 +278,7 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
                           ? 'High confidence'
                           : message.confidence >= 0.7
                           ? 'Good confidence'
-                          : 'Moderate confidence'}
-                        {' '}
+                          : 'Moderate confidence'}{' '}
                         ({(message.confidence * 100).toFixed(0)}%)
                       </span>
                     </div>
@@ -291,8 +309,12 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
         </div>
       </div>
 
-      {/* INPUT AREA - Fixed at bottom */}
-      <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-4">
+      {/* ── ZONE 3: INPUT BAR ──────────────────────────────────────── */}
+      {/*
+       * z-10 ensures this always renders above any content that scrolls
+       * up behind it, and above the global fixed footer if it bleeds through.
+       */}
+      <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-4 z-10">
         <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
           <div className="relative flex items-end gap-2">
             <div className="flex-1 relative">
