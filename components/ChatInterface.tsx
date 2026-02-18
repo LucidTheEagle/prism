@@ -36,24 +36,94 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  /*
-   * Mounted guard — next-themes reads localStorage and system preference
-   * on the client only. Without this, the toggle button renders with the
-   * wrong icon on the server causing a hydration mismatch. We render a
-   * neutral placeholder (same dimensions) until client resolves the theme.
-   */
+  // Hydration guard for theme toggle
   useEffect(() => { setMounted(true) }, [])
 
+  // ── LOAD HISTORY ON MOUNT ──────────────────────────────────────────────────
+  // Fetches all previous messages for this document from the database.
+  // Runs once when the component mounts, only if documentId is present.
+  useEffect(() => {
+    if (!documentId) {
+      setHistoryLoading(false)
+      return
+    }
+
+    const loadHistory = async () => {
+      try {
+        const response = await fetch(`/api/chat/${documentId}/messages`)
+        if (!response.ok) throw new Error('Failed to load history')
+
+        const data = await response.json()
+
+        if (data.messages && data.messages.length > 0) {
+          // Database rows use created_at (string). Map them back to the
+          // local Message shape, restoring timestamp as a Date object.
+          const restored: Message[] = data.messages.map((row: {
+            id: string
+            role: 'user' | 'assistant'
+            content: string
+            confidence?: number
+            citations?: Citation[]
+            created_at: string
+          }) => ({
+            id: row.id,
+            role: row.role,
+            content: row.content,
+            confidence: row.confidence ?? undefined,
+            citations: row.citations ?? undefined,
+            timestamp: new Date(row.created_at),
+          }))
+          setMessages(restored)
+        }
+      } catch {
+        // History load failure is non-fatal. The user can still chat —
+        // they just won't see previous messages. We silently swallow
+        // this error rather than blocking the chat interface.
+      } finally {
+        setHistoryLoading(false)
+      }
+    }
+
+    loadHistory()
+  }, [documentId])
+
+  // ── PERSIST A SINGLE MESSAGE ───────────────────────────────────────────────
+  // Called after every message (user or assistant) is added to local state.
+  // Fire-and-forget: persistence failure does not interrupt the conversation.
+  const persistMessage = async (message: Message) => {
+    if (!documentId) return
+
+    try {
+      await fetch(`/api/chat/${documentId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: message.role,
+          content: message.content,
+          confidence: message.confidence ?? null,
+          citations: message.citations ?? null,
+        }),
+      })
+    } catch {
+      // Persistence failure is non-fatal. The message is already in local
+      // state so the user sees it. It simply won't survive a page reload.
+      // We do not surface this error to avoid disrupting the conversation.
+    }
+  }
+
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Focus input once history has loaded
   useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
+    if (!historyLoading) inputRef.current?.focus()
+  }, [historyLoading])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -67,6 +137,7 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
     }
 
     setMessages(prev => [...prev, userMessage])
+    persistMessage(userMessage)
     setInput('')
     setIsLoading(true)
 
@@ -94,6 +165,7 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
           timestamp: new Date(),
         }
         setMessages(prev => [...prev, assistantMessage])
+        persistMessage(assistantMessage)
       } else {
         throw new Error(data.error || 'Unknown error')
       }
@@ -105,6 +177,7 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
         timestamp: new Date(),
       }
       setMessages(prev => [...prev, errorMessage])
+      // Do not persist error messages — they are transient UI feedback
     } finally {
       setIsLoading(false)
     }
@@ -118,18 +191,12 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
   }
 
   return (
-    /*
-     * ROOT: h-full not h-screen.
-     * Viewport lock (h-screen overflow-hidden) lives in app/chat/layout.tsx.
-     * This component inherits that height via h-full.
-     */
     <div className="h-full flex flex-col overflow-hidden bg-white dark:bg-slate-900">
 
       {/* ── ZONE 1: HEADER ─────────────────────────────────────────── */}
       <div className="shrink-0 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-6 py-3 z-10">
         <div className="flex items-center justify-between">
 
-          {/* Left: Back + Logo + Document name */}
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push('/')}
@@ -159,7 +226,6 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
             )}
           </div>
 
-          {/* Right: AI Ready badge + Theme toggle */}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
               <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
@@ -168,11 +234,6 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
               </span>
             </div>
 
-            {/*
-             * Theme toggle — rendered only after mount.
-             * Before mount: neutral placeholder (same w/h as the button)
-             * to prevent layout shift during hydration.
-             */}
             {mounted ? (
               <button
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -196,8 +257,18 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
       <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
         <div className="max-w-4xl mx-auto px-4 py-6">
 
-          {/* Empty state — hidden after first message */}
-          {messages.length === 0 && (
+          {/* History loading skeleton */}
+          {historyLoading && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-5 h-5 animate-spin text-emerald-600 dark:text-emerald-400 mr-2" />
+              <span className="text-sm text-slate-500 dark:text-slate-400">
+                Loading conversation history...
+              </span>
+            </div>
+          )}
+
+          {/* Empty state — shown only after history has loaded and is empty */}
+          {!historyLoading && messages.length === 0 && (
             <div className="text-center py-12">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-emerald-100 to-emerald-200 dark:from-emerald-900/40 dark:to-emerald-800/40 rounded-full mb-6">
                 <Sparkles className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
@@ -237,106 +308,108 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
           )}
 
           {/* Message thread */}
-          <div className="space-y-6">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
+          {!historyLoading && (
+            <div className="space-y-6">
+              {messages.map((message) => (
                 <div
-                  className={`max-w-3xl ${
-                    message.role === 'user'
-                      ? 'bg-emerald-600 text-white rounded-2xl rounded-br-md'
-                      : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-2xl rounded-bl-md shadow-sm border border-slate-200 dark:border-slate-700'
-                  } px-5 py-4`}
+                  key={message.id}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className="prose prose-sm max-w-none">
-                    {message.role === 'assistant' ? (
-                      <div className="whitespace-pre-wrap leading-relaxed text-slate-900 dark:text-slate-100">
-                        {message.content}
-                      </div>
-                    ) : (
-                      <p className="m-0">{message.content}</p>
-                    )}
-                  </div>
+                  <div
+                    className={`max-w-3xl ${
+                      message.role === 'user'
+                        ? 'bg-emerald-600 text-white rounded-2xl rounded-br-md'
+                        : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-2xl rounded-bl-md shadow-sm border border-slate-200 dark:border-slate-700'
+                    } px-5 py-4`}
+                  >
+                    <div className="prose prose-sm max-w-none">
+                      {message.role === 'assistant' ? (
+                        <div className="whitespace-pre-wrap leading-relaxed text-slate-900 dark:text-slate-100">
+                          {message.content}
+                        </div>
+                      ) : (
+                        <p className="m-0">{message.content}</p>
+                      )}
+                    </div>
 
-                  {/* Citations */}
-                  {message.citations && message.citations.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-600">
-                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                        Sources:
-                      </p>
-                      <div className="space-y-2">
-                        {message.citations.map((citation, idx) => (
-                          <div
-                            key={citation.chunk_id}
-                            className="text-xs bg-slate-50 dark:bg-slate-900 rounded-lg p-3 border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-600 transition-colors cursor-pointer"
-                          >
-                            <div className="flex items-start gap-2">
-                              <span className="shrink-0 w-5 h-5 bg-emerald-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold">
-                                {idx + 1}
-                              </span>
-                              <div className="flex-1">
-                                <p className="text-slate-900 dark:text-slate-100 font-medium">
-                                  Page {citation.page}
-                                </p>
-                                {citation.ai_summary && (
-                                  <p className="text-slate-600 dark:text-slate-400 mt-1">
-                                    {citation.ai_summary}
+                    {/* Citations */}
+                    {message.citations && message.citations.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-600">
+                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                          Sources:
+                        </p>
+                        <div className="space-y-2">
+                          {message.citations.map((citation, idx) => (
+                            <div
+                              key={citation.chunk_id}
+                              className="text-xs bg-slate-50 dark:bg-slate-900 rounded-lg p-3 border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-600 transition-colors cursor-pointer"
+                            >
+                              <div className="flex items-start gap-2">
+                                <span className="shrink-0 w-5 h-5 bg-emerald-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold">
+                                  {idx + 1}
+                                </span>
+                                <div className="flex-1">
+                                  <p className="text-slate-900 dark:text-slate-100 font-medium">
+                                    Page {citation.page}
                                   </p>
-                                )}
-                                <p className="text-slate-500 dark:text-slate-500 mt-1 text-[11px] line-clamp-2">
-                                  {citation.text}
-                                </p>
+                                  {citation.ai_summary && (
+                                    <p className="text-slate-600 dark:text-slate-400 mt-1">
+                                      {citation.ai_summary}
+                                    </p>
+                                  )}
+                                  <p className="text-slate-500 dark:text-slate-500 mt-1 text-[11px] line-clamp-2">
+                                    {citation.text}
+                                  </p>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Confidence indicator */}
-                  {message.confidence !== undefined && (
-                    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-600 flex items-center gap-2">
-                      {message.confidence >= 0.8 ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                      ) : (
-                        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                      )}
-                      <span className="text-xs text-slate-600 dark:text-slate-400">
-                        {message.confidence >= 0.9
-                          ? 'High confidence'
-                          : message.confidence >= 0.7
-                          ? 'Good confidence'
-                          : 'Moderate confidence'}{' '}
-                        ({(message.confidence * 100).toFixed(0)}%)
-                      </span>
-                    </div>
-                  )}
+                    {/* Confidence indicator */}
+                    {message.confidence !== undefined && (
+                      <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-600 flex items-center gap-2">
+                        {message.confidence >= 0.8 ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                        )}
+                        <span className="text-xs text-slate-600 dark:text-slate-400">
+                          {message.confidence >= 0.9
+                            ? 'High confidence'
+                            : message.confidence >= 0.7
+                            ? 'Good confidence'
+                            : 'Moderate confidence'}{' '}
+                          ({(message.confidence * 100).toFixed(0)}%)
+                        </span>
+                      </div>
+                    )}
 
-                  {/* Timestamp */}
-                  <div className="mt-2 text-xs opacity-60">
-                    {message.timestamp.toLocaleTimeString()}
+                    {/* Timestamp */}
+                    <div className="mt-2 text-xs opacity-60">
+                      {message.timestamp.toLocaleTimeString()}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
 
-            {/* Loading indicator */}
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-bl-md shadow-sm border border-slate-200 dark:border-slate-700 px-5 py-4">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-emerald-600 dark:text-emerald-400" />
-                    <span className="text-sm text-slate-600 dark:text-slate-400">Thinking...</span>
+              {/* Loading indicator */}
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-bl-md shadow-sm border border-slate-200 dark:border-slate-700 px-5 py-4">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-sm text-slate-600 dark:text-slate-400">Thinking...</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div ref={messagesEndRef} />
-          </div>
+              <div ref={messagesEndRef} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -351,7 +424,7 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask a question..."
-                disabled={isLoading}
+                disabled={isLoading || historyLoading}
                 rows={1}
                 className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-shadow"
                 style={{ minHeight: '48px', maxHeight: '120px' }}
@@ -359,7 +432,7 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
             </div>
             <button
               type="submit"
-              disabled={!input.trim() || isLoading}
+              disabled={!input.trim() || isLoading || historyLoading}
               className="shrink-0 p-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm hover:shadow-md"
             >
               {isLoading ? (
