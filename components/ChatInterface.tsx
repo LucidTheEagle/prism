@@ -1,9 +1,13 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, CheckCircle2, AlertCircle, FileText, Sparkles, ArrowLeft, Moon, Sun } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import {
+  Send, Loader2, CheckCircle2, AlertCircle, FileText,
+  Sparkles, ArrowLeft, Moon, Sun, Download, ChevronDown
+} from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
+import { exportConversation } from '@/lib/utils/export'
 
 interface Message {
   id: string
@@ -24,18 +28,46 @@ interface Citation {
   chunk_index: number
 }
 
+interface Document {
+  id: string
+  name: string
+  status: string
+  page_count: number
+  document_type: string
+  created_at: string
+}
+
 interface ChatInterfaceProps {
   documentId?: string
   documentName?: string
-  // Called when a citation card is clicked. Passes the page number up to
-  // SplitLayout, which forwards it to PDFViewer as targetPage.
   onCitationClick?: (page: number) => void
+  // Called when user switches document — tells SplitLayout to update
+  // the PDFViewer with the new document ID
+  onDocumentChange?: (documentId: string, documentName: string) => void
 }
 
-export default function ChatInterface({ documentId, documentName, onCitationClick }: ChatInterfaceProps) {
+export default function ChatInterface({
+  documentId: initialDocumentId,
+  documentName: initialDocumentName,
+  onCitationClick,
+  onDocumentChange,
+}: ChatInterfaceProps) {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+
+  // ── Active document state ──────────────────────────────────────────
+  // Starts with the prop values but can be changed via the selector
+  const [activeDocumentId, setActiveDocumentId] = useState(initialDocumentId)
+  const [activeDocumentName, setActiveDocumentName] = useState(initialDocumentName)
+
+  // ── Document selector state ────────────────────────────────────────
+  const [allDocuments, setAllDocuments] = useState<Document[]>([])
+  const [selectorOpen, setSelectorOpen] = useState(false)
+  const [docsLoading, setDocsLoading] = useState(false)
+  const selectorRef = useRef<HTMLDivElement>(null)
+
+  // ── Chat state ────────────────────────────────────────────────────
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -45,16 +77,65 @@ export default function ChatInterface({ documentId, documentName, onCitationClic
 
   useEffect(() => { setMounted(true) }, [])
 
-  // Load message history on mount
+  // ── Close selector on outside click ───────────────────────────────
   useEffect(() => {
-    if (!documentId) {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (selectorRef.current && !selectorRef.current.contains(e.target as Node)) {
+        setSelectorOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // ── Fetch all ready documents when selector opens ─────────────────
+  const fetchAllDocuments = useCallback(async () => {
+    if (allDocuments.length > 0) return // Already loaded
+    setDocsLoading(true)
+    try {
+      const response = await fetch('/api/documents')
+      if (!response.ok) throw new Error('Failed to fetch documents')
+      const data = await response.json()
+      // Only show documents that are ready for chat
+      const ready = (data.documents || []).filter(
+        (d: Document) => d.status === 'ready'
+      )
+      setAllDocuments(ready)
+    } catch {
+      // Non-fatal — selector just shows empty state
+    } finally {
+      setDocsLoading(false)
+    }
+  }, [allDocuments.length])
+
+  const handleSelectorOpen = () => {
+    setSelectorOpen(prev => !prev)
+    fetchAllDocuments()
+  }
+
+  // ── Switch active document ─────────────────────────────────────────
+  const handleDocumentSwitch = (doc: Document) => {
+    setSelectorOpen(false)
+    if (doc.id === activeDocumentId) return
+
+    setActiveDocumentId(doc.id)
+    setActiveDocumentName(doc.name)
+    setMessages([]) // Clear current conversation
+    setHistoryLoading(true)
+    onDocumentChange?.(doc.id, doc.name)
+  }
+
+  // ── Load message history ───────────────────────────────────────────
+  useEffect(() => {
+    if (!activeDocumentId) {
       setHistoryLoading(false)
       return
     }
 
     const loadHistory = async () => {
+      setHistoryLoading(true)
       try {
-        const response = await fetch(`/api/chat/${documentId}/messages`)
+        const response = await fetch(`/api/chat/${activeDocumentId}/messages`)
         if (!response.ok) throw new Error('Failed to load history')
         const data = await response.json()
 
@@ -75,22 +156,24 @@ export default function ChatInterface({ documentId, documentName, onCitationClic
             timestamp: new Date(row.created_at),
           }))
           setMessages(restored)
+        } else {
+          setMessages([])
         }
       } catch {
-        // Non-fatal — user can still chat without history
+        // Non-fatal
       } finally {
         setHistoryLoading(false)
       }
     }
 
     loadHistory()
-  }, [documentId])
+  }, [activeDocumentId])
 
-  // Persist a single message — fire and forget
+  // ── Persist a message ──────────────────────────────────────────────
   const persistMessage = async (message: Message) => {
-    if (!documentId) return
+    if (!activeDocumentId) return
     try {
-      await fetch(`/api/chat/${documentId}/messages`, {
+      await fetch(`/api/chat/${activeDocumentId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -101,7 +184,7 @@ export default function ChatInterface({ documentId, documentName, onCitationClic
         }),
       })
     } catch {
-      // Non-fatal — message is in local state regardless
+      // Non-fatal
     }
   }
 
@@ -135,7 +218,7 @@ export default function ChatInterface({ documentId, documentName, onCitationClic
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: userMessage.content,
-          documentId: documentId || undefined,
+          documentId: activeDocumentId || undefined,
         }),
       })
 
@@ -164,7 +247,6 @@ export default function ChatInterface({ documentId, documentName, onCitationClic
         timestamp: new Date(),
       }
       setMessages(prev => [...prev, errorMessage])
-      // Error messages are not persisted — they are transient UI feedback
     } finally {
       setIsLoading(false)
     }
@@ -177,50 +259,130 @@ export default function ChatInterface({ documentId, documentName, onCitationClic
     }
   }
 
+  const handleExport = () => {
+    exportConversation(messages, activeDocumentName || 'Document')
+  }
+
   return (
     <div className="h-full flex flex-col overflow-hidden bg-white dark:bg-slate-900">
 
       {/* ── ZONE 1: HEADER ─────────────────────────────────────────── */}
-      <div className="shrink-0 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-6 py-3 z-10">
-        <div className="flex items-center justify-between">
+      <div className="shrink-0 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 z-10">
+        <div className="flex items-center justify-between gap-2">
 
-          <div className="flex items-center gap-4">
+          {/* Left: Back + Logo + Document selector */}
+          <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => router.push('/')}
-              className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              className="shrink-0 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
               title="Back to home"
             >
-              <ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+              <ArrowLeft className="w-4 h-4 text-slate-600 dark:text-slate-400" />
             </button>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 shrink-0">
               <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg">
-                <Sparkles className="w-4 h-4 text-white" />
+                <Sparkles className="w-3.5 h-3.5 text-white" />
               </div>
-              <h1 className="text-lg font-bold text-slate-900 dark:text-slate-50">PRISM</h1>
+              <h1 className="text-base font-bold text-slate-900 dark:text-slate-50">PRISM</h1>
             </div>
 
-            {documentName && (
-              <>
-                <div className="w-px h-6 bg-slate-300 dark:bg-slate-600" />
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                  <FileText className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    {documentName}
-                  </span>
+            {/* Document selector */}
+            <div className="w-px h-5 bg-slate-300 dark:bg-slate-600 shrink-0" />
+            <div ref={selectorRef} className="relative min-w-0">
+              <button
+                onClick={handleSelectorOpen}
+                className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors max-w-[200px] group"
+                title="Switch document"
+              >
+                <FileText className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400 shrink-0" />
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">
+                  {activeDocumentName || 'Select document'}
+                </span>
+                <ChevronDown className={`w-3.5 h-3.5 text-slate-500 shrink-0 transition-transform ${selectorOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* Dropdown */}
+              {selectorOpen && (
+                <div className="absolute top-full left-0 mt-1 w-72 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg z-50 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700">
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                      Ready Documents
+                    </p>
+                  </div>
+
+                  {docsLoading && (
+                    <div className="flex items-center justify-center py-6 gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                      <span className="text-xs text-slate-500">Loading...</span>
+                    </div>
+                  )}
+
+                  {!docsLoading && allDocuments.length === 0 && (
+                    <div className="px-3 py-4 text-center">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        No other documents available
+                      </p>
+                    </div>
+                  )}
+
+                  {!docsLoading && allDocuments.length > 0 && (
+                    <div className="max-h-60 overflow-y-auto">
+                      {allDocuments.map((doc) => (
+                        <button
+                          key={doc.id}
+                          onClick={() => handleDocumentSwitch(doc)}
+                          className={`w-full text-left px-3 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors border-b border-slate-100 dark:border-slate-700 last:border-0 ${
+                            doc.id === activeDocumentId
+                              ? 'bg-emerald-50 dark:bg-emerald-900/20'
+                              : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
+                                {doc.name}
+                              </p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                {doc.page_count ? `${doc.page_count} pages` : 'PDF'}
+                                {doc.document_type ? ` · ${doc.document_type}` : ''}
+                              </p>
+                            </div>
+                            {doc.id === activeDocumentId && (
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </>
-            )}
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
+          {/* Right: AI Ready + Export + Theme toggle */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
               <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
               <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
                 AI Ready
               </span>
             </div>
 
+            {/* Export button — only shown when there are messages */}
+            {messages.length > 0 && (
+              <button
+                onClick={handleExport}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                title="Export conversation as Markdown"
+              >
+                <Download className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+              </button>
+            )}
+
+            {/* Theme toggle */}
             {mounted ? (
               <button
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -228,9 +390,9 @@ export default function ChatInterface({ documentId, documentName, onCitationClic
                 title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {theme === 'dark' ? (
-                  <Sun className="w-4 h-4 text-slate-400 hover:text-slate-200 transition-colors" />
+                  <Sun className="w-4 h-4 text-slate-400" />
                 ) : (
-                  <Moon className="w-4 h-4 text-slate-600 hover:text-slate-900 transition-colors" />
+                  <Moon className="w-4 h-4 text-slate-600" />
                 )}
               </button>
             ) : (
@@ -316,7 +478,7 @@ export default function ChatInterface({ documentId, documentName, onCitationClic
                       )}
                     </div>
 
-                    {/* Citations — clickable, fires onCitationClick */}
+                    {/* Citations */}
                     {message.citations && message.citations.length > 0 && (
                       <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-600">
                         <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
@@ -354,7 +516,7 @@ export default function ChatInterface({ documentId, documentName, onCitationClic
                       </div>
                     )}
 
-                    {/* Confidence indicator */}
+                    {/* Confidence */}
                     {message.confidence !== undefined && (
                       <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-600 flex items-center gap-2">
                         {message.confidence >= 0.8 ? (

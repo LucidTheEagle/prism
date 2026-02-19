@@ -6,17 +6,9 @@ import ChatInterface from './ChatInterface'
 import { Loader2 } from 'lucide-react'
 
 /*
- * PDFViewer must NEVER be server-rendered.
- *
- * pdfjs-dist references browser-only DOM APIs (DOMMatrix, CanvasContext, etc.)
- * at module evaluation time — not inside useEffect, not lazily, but immediately
- * when the module is first imported. This means if Next.js includes PDFViewer
- * in the server render, Node.js throws "DOMMatrix is not defined" and the
- * entire /chat route returns a 500.
- *
- * next/dynamic with ssr: false defers the import entirely to the client bundle.
- * The server renders the loading fallback; the client hydrates and then loads
- * the real PDFViewer. This is the correct and only fix for this class of error.
+ * PDFViewer must never be server-rendered.
+ * pdfjs-dist references browser-only DOM APIs at module evaluation time.
+ * next/dynamic with ssr:false defers the import to the client bundle only.
  */
 const PDFViewer = dynamic(() => import('./PDFViewer'), {
   ssr: false,
@@ -38,8 +30,20 @@ interface SplitLayoutProps {
 export default function SplitLayout({ documentId, documentName }: SplitLayoutProps) {
   const [targetPage, setTargetPage] = useState<number | undefined>(undefined)
 
+  /*
+   * Active PDF document — starts with the prop value but updates when the
+   * user switches documents via the ChatInterface selector. This keeps the
+   * PDF panel in sync with whatever document is active in the chat panel.
+   */
+  const [activePdfDocumentId, setActivePdfDocumentId] = useState(documentId)
+
   const handleCitationClick = useCallback((page: number) => {
     setTargetPage(page)
+  }, [])
+
+  const handleDocumentChange = useCallback((newDocumentId: string) => {
+    setActivePdfDocumentId(newDocumentId)
+    setTargetPage(undefined) // Reset page position on document switch
   }, [])
 
   return (
@@ -48,7 +52,7 @@ export default function SplitLayout({ documentId, documentName }: SplitLayoutPro
       {/* ── LEFT PANEL: PDF Viewer ──────────────────────────────────── */}
       <div className="h-[40vh] lg:h-full lg:w-1/2 shrink-0 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-700 overflow-hidden">
         <PDFViewer
-          documentId={documentId}
+          documentId={activePdfDocumentId}
           targetPage={targetPage}
         />
       </div>
@@ -59,6 +63,7 @@ export default function SplitLayout({ documentId, documentName }: SplitLayoutPro
           documentId={documentId}
           documentName={documentName}
           onCitationClick={handleCitationClick}
+          onDocumentChange={handleDocumentChange}
         />
       </div>
     </div>
