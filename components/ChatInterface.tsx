@@ -27,9 +27,12 @@ interface Citation {
 interface ChatInterfaceProps {
   documentId?: string
   documentName?: string
+  // Called when a citation card is clicked. Passes the page number up to
+  // SplitLayout, which forwards it to PDFViewer as targetPage.
+  onCitationClick?: (page: number) => void
 }
 
-export default function ChatInterface({ documentId, documentName }: ChatInterfaceProps) {
+export default function ChatInterface({ documentId, documentName, onCitationClick }: ChatInterfaceProps) {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
@@ -40,12 +43,9 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // Hydration guard for theme toggle
   useEffect(() => { setMounted(true) }, [])
 
-  // ── LOAD HISTORY ON MOUNT ──────────────────────────────────────────────────
-  // Fetches all previous messages for this document from the database.
-  // Runs once when the component mounts, only if documentId is present.
+  // Load message history on mount
   useEffect(() => {
     if (!documentId) {
       setHistoryLoading(false)
@@ -56,12 +56,9 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
       try {
         const response = await fetch(`/api/chat/${documentId}/messages`)
         if (!response.ok) throw new Error('Failed to load history')
-
         const data = await response.json()
 
         if (data.messages && data.messages.length > 0) {
-          // Database rows use created_at (string). Map them back to the
-          // local Message shape, restoring timestamp as a Date object.
           const restored: Message[] = data.messages.map((row: {
             id: string
             role: 'user' | 'assistant'
@@ -80,9 +77,7 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
           setMessages(restored)
         }
       } catch {
-        // History load failure is non-fatal. The user can still chat —
-        // they just won't see previous messages. We silently swallow
-        // this error rather than blocking the chat interface.
+        // Non-fatal — user can still chat without history
       } finally {
         setHistoryLoading(false)
       }
@@ -91,12 +86,9 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
     loadHistory()
   }, [documentId])
 
-  // ── PERSIST A SINGLE MESSAGE ───────────────────────────────────────────────
-  // Called after every message (user or assistant) is added to local state.
-  // Fire-and-forget: persistence failure does not interrupt the conversation.
+  // Persist a single message — fire and forget
   const persistMessage = async (message: Message) => {
     if (!documentId) return
-
     try {
       await fetch(`/api/chat/${documentId}/messages`, {
         method: 'POST',
@@ -109,18 +101,14 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
         }),
       })
     } catch {
-      // Persistence failure is non-fatal. The message is already in local
-      // state so the user sees it. It simply won't survive a page reload.
-      // We do not surface this error to avoid disrupting the conversation.
+      // Non-fatal — message is in local state regardless
     }
   }
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Focus input once history has loaded
   useEffect(() => {
     if (!historyLoading) inputRef.current?.focus()
   }, [historyLoading])
@@ -152,7 +140,6 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
       })
 
       if (!response.ok) throw new Error('Failed to get response')
-
       const data = await response.json()
 
       if (data.success) {
@@ -177,7 +164,7 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
         timestamp: new Date(),
       }
       setMessages(prev => [...prev, errorMessage])
-      // Do not persist error messages — they are transient UI feedback
+      // Error messages are not persisted — they are transient UI feedback
     } finally {
       setIsLoading(false)
     }
@@ -255,9 +242,8 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
 
       {/* ── ZONE 2: MESSAGES ───────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
-        <div className="max-w-4xl mx-auto px-4 py-6">
+        <div className="max-w-2xl mx-auto px-4 py-6">
 
-          {/* History loading skeleton */}
           {historyLoading && (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-5 h-5 animate-spin text-emerald-600 dark:text-emerald-400 mr-2" />
@@ -267,20 +253,19 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
             </div>
           )}
 
-          {/* Empty state — shown only after history has loaded and is empty */}
           {!historyLoading && messages.length === 0 && (
             <div className="text-center py-12">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-emerald-100 to-emerald-200 dark:from-emerald-900/40 dark:to-emerald-800/40 rounded-full mb-6">
                 <Sparkles className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
               </div>
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-50 mb-2">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-2">
                 Ask anything about your document
               </h2>
-              <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto mb-8">
+              <p className="text-slate-600 dark:text-slate-400 max-w-sm mx-auto mb-8 text-sm">
                 Get instant answers with citations and confidence scores
               </p>
 
-              <div className="grid gap-3 max-w-2xl mx-auto">
+              <div className="grid gap-3">
                 <button
                   onClick={() => setInput('What are the key terms of this document?')}
                   className="text-left p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-600 hover:shadow-md transition-all group"
@@ -307,7 +292,6 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
             </div>
           )}
 
-          {/* Message thread */}
           {!historyLoading && (
             <div className="space-y-6">
               {messages.map((message) => (
@@ -316,7 +300,7 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-3xl ${
+                    className={`max-w-full ${
                       message.role === 'user'
                         ? 'bg-emerald-600 text-white rounded-2xl rounded-br-md'
                         : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-2xl rounded-bl-md shadow-sm border border-slate-200 dark:border-slate-700'
@@ -332,7 +316,7 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
                       )}
                     </div>
 
-                    {/* Citations */}
+                    {/* Citations — clickable, fires onCitationClick */}
                     {message.citations && message.citations.length > 0 && (
                       <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-600">
                         <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
@@ -342,15 +326,17 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
                           {message.citations.map((citation, idx) => (
                             <div
                               key={citation.chunk_id}
-                              className="text-xs bg-slate-50 dark:bg-slate-900 rounded-lg p-3 border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-600 transition-colors cursor-pointer"
+                              onClick={() => onCitationClick?.(citation.page)}
+                              className="text-xs bg-slate-50 dark:bg-slate-900 rounded-lg p-3 border border-slate-200 dark:border-slate-700 hover:border-emerald-400 dark:hover:border-emerald-500 hover:shadow-sm transition-all cursor-pointer group"
+                              title={`Jump to page ${citation.page}`}
                             >
                               <div className="flex items-start gap-2">
                                 <span className="shrink-0 w-5 h-5 bg-emerald-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold">
                                   {idx + 1}
                                 </span>
                                 <div className="flex-1">
-                                  <p className="text-slate-900 dark:text-slate-100 font-medium">
-                                    Page {citation.page}
+                                  <p className="text-slate-900 dark:text-slate-100 font-medium group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
+                                    Page {citation.page} ↗
                                   </p>
                                   {citation.ai_summary && (
                                     <p className="text-slate-600 dark:text-slate-400 mt-1">
@@ -387,7 +373,6 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
                       </div>
                     )}
 
-                    {/* Timestamp */}
                     <div className="mt-2 text-xs opacity-60">
                       {message.timestamp.toLocaleTimeString()}
                     </div>
@@ -395,7 +380,6 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
                 </div>
               ))}
 
-              {/* Loading indicator */}
               {isLoading && (
                 <div className="flex justify-start">
                   <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-bl-md shadow-sm border border-slate-200 dark:border-slate-700 px-5 py-4">
@@ -415,7 +399,7 @@ export default function ChatInterface({ documentId, documentName }: ChatInterfac
 
       {/* ── ZONE 3: INPUT BAR ──────────────────────────────────────── */}
       <div className="shrink-0 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-4 z-10">
-        <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
+        <form onSubmit={handleSubmit} className="max-w-2xl mx-auto">
           <div className="relative flex items-end gap-2">
             <div className="flex-1 relative">
               <textarea

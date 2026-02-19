@@ -1,0 +1,66 @@
+'use client'
+
+import { useState, useCallback } from 'react'
+import dynamic from 'next/dynamic'
+import ChatInterface from './ChatInterface'
+import { Loader2 } from 'lucide-react'
+
+/*
+ * PDFViewer must NEVER be server-rendered.
+ *
+ * pdfjs-dist references browser-only DOM APIs (DOMMatrix, CanvasContext, etc.)
+ * at module evaluation time — not inside useEffect, not lazily, but immediately
+ * when the module is first imported. This means if Next.js includes PDFViewer
+ * in the server render, Node.js throws "DOMMatrix is not defined" and the
+ * entire /chat route returns a 500.
+ *
+ * next/dynamic with ssr: false defers the import entirely to the client bundle.
+ * The server renders the loading fallback; the client hydrates and then loads
+ * the real PDFViewer. This is the correct and only fix for this class of error.
+ */
+const PDFViewer = dynamic(() => import('./PDFViewer'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center bg-slate-100 dark:bg-slate-950">
+      <div className="flex items-center gap-2">
+        <Loader2 className="w-5 h-5 animate-spin text-emerald-600 dark:text-emerald-400" />
+        <span className="text-sm text-slate-500 dark:text-slate-400">Loading PDF viewer...</span>
+      </div>
+    </div>
+  ),
+})
+
+interface SplitLayoutProps {
+  documentId: string
+  documentName: string
+}
+
+export default function SplitLayout({ documentId, documentName }: SplitLayoutProps) {
+  const [targetPage, setTargetPage] = useState<number | undefined>(undefined)
+
+  const handleCitationClick = useCallback((page: number) => {
+    setTargetPage(page)
+  }, [])
+
+  return (
+    <div className="h-full flex flex-col lg:flex-row overflow-hidden">
+
+      {/* ── LEFT PANEL: PDF Viewer ──────────────────────────────────── */}
+      <div className="h-[40vh] lg:h-full lg:w-1/2 shrink-0 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-700 overflow-hidden">
+        <PDFViewer
+          documentId={documentId}
+          targetPage={targetPage}
+        />
+      </div>
+
+      {/* ── RIGHT PANEL: Chat ───────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <ChatInterface
+          documentId={documentId}
+          documentName={documentName}
+          onCitationClick={handleCitationClick}
+        />
+      </div>
+    </div>
+  )
+}
