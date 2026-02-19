@@ -55,88 +55,59 @@
 
 /* =============================================================================
    Shadcn CSS Variables — Light & Dark
-   Required because components.json has "cssVariables": true.
-   Without this block, bg-card, bg-background, text-muted-foreground, etc.
-   resolve to nothing. Dark mode overrides live in .dark selector.
    ============================================================================= */
 
 :root {
-  /* Base */
-  --background: #f8fafc;        /* slate-50 */
-  --foreground: #0f172a;        /* slate-900 */
-
-  /* Card */
+  --background: #f8fafc;
+  --foreground: #0f172a;
   --card: #ffffff;
-  --card-foreground: #0f172a;   /* slate-900 */
-
-  /* Popover */
+  --card-foreground: #0f172a;
   --popover: #ffffff;
   --popover-foreground: #0f172a;
-
-  /* Primary — Emerald */
-  --primary: #059669;           /* emerald-600 */
+  --primary: #059669;
   --primary-foreground: #ffffff;
-
-  /* Secondary */
-  --secondary: #f1f5f9;         /* slate-100 */
+  --secondary: #f1f5f9;
   --secondary-foreground: #0f172a;
-
-  /* Muted */
-  --muted: #f1f5f9;             /* slate-100 */
-  --muted-foreground: #64748b;  /* slate-500 */
-
-  /* Accent */
-  --accent: #f1f5f9;            /* slate-100 */
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
   --accent-foreground: #0f172a;
-
-  /* Destructive */
-  --destructive: #e11d48;       /* rose-600 */
-
-  /* Border / Input / Ring */
-  --border: #e2e8f0;            /* slate-200 */
-  --input: #e2e8f0;             /* slate-200 */
-  --ring: #059669;              /* emerald-600 */
-
-  /* Radius */
+  --destructive: #e11d48;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #059669;
   --radius: 0.5rem;
+
+  /* Scrollbar tokens — light mode */
+  --scrollbar-track: #f1f5f9;       /* slate-100 */
+  --scrollbar-thumb: #cbd5e1;       /* slate-300 */
+  --scrollbar-thumb-hover: #059669; /* emerald-600 */
 }
 
 .dark {
-  /* Base */
-  --background: #0f172a;        /* slate-900 */
-  --foreground: #f8fafc;        /* slate-50 */
-
-  /* Card */
-  --card: #1e293b;              /* slate-800 */
-  --card-foreground: #f8fafc;   /* slate-50 */
-
-  /* Popover */
+  --background: #0f172a;
+  --foreground: #f8fafc;
+  --card: #1e293b;
+  --card-foreground: #f8fafc;
   --popover: #1e293b;
   --popover-foreground: #f8fafc;
-
-  /* Primary — Emerald (slightly lighter for dark bg) */
-  --primary: #10b981;           /* emerald-500 */
+  --primary: #10b981;
   --primary-foreground: #ffffff;
-
-  /* Secondary */
-  --secondary: #1e293b;         /* slate-800 */
+  --secondary: #1e293b;
   --secondary-foreground: #f8fafc;
-
-  /* Muted */
-  --muted: #1e293b;             /* slate-800 */
-  --muted-foreground: #94a3b8;  /* slate-400 */
-
-  /* Accent */
-  --accent: #1e293b;            /* slate-800 */
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #1e293b;
   --accent-foreground: #f8fafc;
+  --destructive: #f43f5e;
+  --border: #334155;
+  --input: #334155;
+  --ring: #10b981;
 
-  /* Destructive */
-  --destructive: #f43f5e;       /* rose-500 */
-
-  /* Border / Input / Ring */
-  --border: #334155;            /* slate-700 */
-  --input: #334155;             /* slate-700 */
-  --ring: #10b981;              /* emerald-500 */
+  /* Scrollbar tokens — dark mode */
+  --scrollbar-track: #0f172a;       /* slate-900 */
+  --scrollbar-thumb: #334155;       /* slate-700 */
+  --scrollbar-thumb-hover: #10b981; /* emerald-500 */
 }
 
 @layer base {
@@ -149,6 +120,51 @@
     color: var(--foreground);
     font-family: system-ui, -apple-system, sans-serif;
   }
+}
+
+/* =============================================================================
+   PRISM Custom Scrollbar
+   
+   Design goals:
+   - Thin (6px) so it doesn't compete with content
+   - Rounded thumb — feels modern, not Win95
+   - Transparent track — blends into panel background
+   - Emerald on hover — PRISM brand accent, instant feedback
+   - Smooth transition on thumb color change
+   - Dark mode aware via CSS variables set above
+   - Firefox supported via scrollbar-width + scrollbar-color
+   - Applies globally so both PDF panel and chat messages panel match
+   ============================================================================= */
+
+/* Webkit (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px; /* for horizontal scrollbars (PDF zoom) */
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 999px;
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 /* =============================================================================
@@ -170,51 +186,18 @@
    ============================================================================= */
 
 @layer utilities {
-  /* Trust Score Colors - Background */
-  .bg-trust-high {
-    background-color: var(--color-prism-trust-high);
-  }
+  .bg-trust-high { background-color: var(--color-prism-trust-high); }
+  .bg-trust-medium { background-color: var(--color-prism-trust-medium); }
+  .bg-trust-low { background-color: var(--color-prism-trust-low); }
 
-  .bg-trust-medium {
-    background-color: var(--color-prism-trust-medium);
-  }
+  .text-trust-high { color: var(--color-prism-trust-high); }
+  .text-trust-medium { color: var(--color-prism-trust-medium); }
+  .text-trust-low { color: var(--color-prism-trust-low); }
 
-  .bg-trust-low {
-    background-color: var(--color-prism-trust-low);
-  }
+  .border-trust-high { border-color: var(--color-prism-trust-high); }
+  .border-trust-medium { border-color: var(--color-prism-trust-medium); }
+  .border-trust-low { border-color: var(--color-prism-trust-low); }
 
-  /* Trust Score Colors - Text */
-  .text-trust-high {
-    color: var(--color-prism-trust-high);
-  }
-
-  .text-trust-medium {
-    color: var(--color-prism-trust-medium);
-  }
-
-  .text-trust-low {
-    color: var(--color-prism-trust-low);
-  }
-
-  /* Trust Score Colors - Border */
-  .border-trust-high {
-    border-color: var(--color-prism-trust-high);
-  }
-
-  .border-trust-medium {
-    border-color: var(--color-prism-trust-medium);
-  }
-
-  .border-trust-low {
-    border-color: var(--color-prism-trust-low);
-  }
-
-  /* Custom Animations */
-  .animate-blink {
-    animation: blink 1s infinite;
-  }
-
-  .animate-pulse-slow {
-    animation: pulse-slow 3s ease-in-out infinite;
-  }
+  .animate-blink { animation: blink 1s infinite; }
+  .animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
 }

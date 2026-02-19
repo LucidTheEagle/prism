@@ -48,7 +48,7 @@ export default function PDFViewer({ documentId, targetPage }: PDFViewerProps) {
   }, [])
 
   // When parent signals a citation click, jump to that page.
-  // Defer setState so we don't trigger a synchronous cascading render (React guidance).
+  // Defer setState so the effect doesn't trigger a synchronous cascading render.
   useEffect(() => {
     if (targetPage != null && targetPage >= 1 && targetPage <= numPages) {
       const page = targetPage
@@ -134,7 +134,7 @@ export default function PDFViewer({ documentId, targetPage }: PDFViewerProps) {
       {/* ── PDF RENDER AREA ───────────────────────────────────────────── */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto flex justify-center py-4 px-2"
+        className="flex-1 overflow-auto flex justify-center py-4 px-2 prism-scroll"
       >
         {/* Error state */}
         {error && (

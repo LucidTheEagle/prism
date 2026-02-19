@@ -327,7 +327,7 @@ export default function ChatInterface({
                   )}
 
                   {!docsLoading && allDocuments.length > 0 && (
-                    <div className="max-h-60 overflow-y-auto">
+                    <div className="max-h-60 overflow-y-auto prism-scroll">
                       {allDocuments.map((doc) => (
                         <button
                           key={doc.id}
@@ -403,7 +403,7 @@ export default function ChatInterface({
       </div>
 
       {/* ── ZONE 2: MESSAGES ───────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
+      <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950 prism-scroll">
         <div className="max-w-2xl mx-auto px-4 py-6">
 
           {historyLoading && (
