@@ -69,7 +69,16 @@ export default function ConditionalShell({
         </div>
       </header>
 
-      <main className="h-[calc(100vh-4rem)]">
+      {/*
+       * min-h instead of h — home page content is taller than one viewport
+       * and needs to scroll. h-[calc] was capping it at exactly the viewport
+       * height, cutting off everything below.
+       *
+       * pb-8 — the footer is position:fixed at the bottom (~32px tall).
+       * Without bottom padding the last section of page content scrolls
+       * behind the footer and becomes unreachable.
+       */}
+      <main className="min-h-[calc(100vh-4rem)] pb-8">
         {children}
       </main>
 
