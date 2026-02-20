@@ -7,8 +7,51 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'PRISM - Precision Document Intelligence',
-  description: 'AI-powered document analysis with forensic citation accuracy. Transform PDFs into queryable knowledge with verified answers.',
+  title: {
+    default: 'PRISM — Precision Document Intelligence',
+    template: '%s — PRISM',
+  },
+  description:
+    'Transform any PDF into an intelligent knowledge base with forensic citation accuracy. AI-powered document Q&A with hybrid search and multi-pass reasoning.',
+  keywords: [
+    'document intelligence',
+    'PDF AI',
+    'document Q&A',
+    'RAG',
+    'citation accuracy',
+    'legal AI',
+    'compliance AI',
+  ],
+  authors: [{ name: 'PRISM' }],
+  creator: 'PRISM',
+
+  // ── Open Graph (LinkedIn, Slack, WhatsApp previews) ──────────────
+  openGraph: {
+    type: 'website',
+    title: 'PRISM — Precision Document Intelligence',
+    description:
+      'Transform any PDF into an intelligent knowledge base with forensic citation accuracy.',
+    siteName: 'PRISM',
+  },
+
+  // ── Twitter / X card ─────────────────────────────────────────────
+  twitter: {
+    card: 'summary',
+    title: 'PRISM — Precision Document Intelligence',
+    description:
+      'Transform any PDF into an intelligent knowledge base with forensic citation accuracy.',
+  },
+
+  // ── Favicon — Next.js picks up app/icon.tsx automatically ────────
+  // No manual <link rel="icon"> needed. Next.js 16 generates all sizes
+  // (16x16, 32x32, apple-touch-icon) from app/icon.tsx and
+  // app/apple-icon.tsx at build time.
+
+  // ── Robots ───────────────────────────────────────────────────────
+  robots: {
+    index: true,
+    follow: true,
+  },
 }
 
 export default function RootLayout({
@@ -25,16 +68,6 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {/*
-           * ConditionalShell reads usePathname() to decide whether to
-           * render the global header + footer. On /chat it renders nothing
-           * but children — full viewport, no chrome. On all other routes
-           * it renders the full header + main + footer shell.
-           *
-           * This replaces the nested app/chat/layout.tsx approach which
-           * caused hydration mismatches in Next.js 16 + Turbopack because
-           * child layouts cannot safely re-declare <html> and <body>.
-           */}
           <ConditionalShell>{children}</ConditionalShell>
         </ThemeProvider>
       </body>
