@@ -1,17 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase/server'
+import { supabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
+import { runIngestionPipeline } from '@/lib/ai/ingestion-pipeline'
 
+/**
+ * POST /api/upload
+ *
+ * Accepts a PDF file, uploads it to Supabase Storage, creates a
+ * document record owned by the authenticated user, then kicks off
+ * the ingestion pipeline directly (no internal HTTP hop — avoids
+ * auth complexity between server-to-server calls).
+ *
+ * Auth: Required. user_id is extracted from the session cookie and
+ * stamped on the document row so RLS policies enforce ownership.
+ */
 export async function POST(request: NextRequest) {
   try {
+    // ── 1. Authenticate the request ───────────────────────────────
+    const supabase = await createSupabaseServerClient()
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Please sign in to upload documents.' },
+        { status: 401 }
+      )
+    }
+
+    // ── 2. Parse and validate the form data ───────────────────────
     const formData = await request.formData()
     const file = formData.get('file') as File
 
-    // Validation
     if (!file) {
-      return NextResponse.json(
-        { error: 'No file provided' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
     if (file.type !== 'application/pdf') {
@@ -28,91 +51,74 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate unique filename
+    // ── 3. Upload to Supabase Storage ─────────────────────────────
+    // Storage uses supabaseAdmin — the bucket is private and signed
+    // URL generation is controlled server-side. The user_id prefix
+    // in the filename creates a logical namespace per user.
     const timestamp = Date.now()
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-    const filename = `${timestamp}_${sanitizedName}`
+    const filename = `${user.id}_${timestamp}_${sanitizedName}`
 
-    // Convert File to ArrayBuffer
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+    const { error: uploadError } = await supabaseAdmin.storage
       .from('document-uploads')
       .upload(filename, buffer, {
         contentType: 'application/pdf',
-        upsert: false
+        upsert: false,
       })
 
     if (uploadError) {
-      console.error('Storage upload error:', uploadError)
+      console.error('[Upload] Storage error:', uploadError)
       throw new Error('Failed to upload file to storage')
     }
 
-    // Get public URL
-    const { data: { publicUrl } } = supabaseAdmin.storage
-      .from('document-uploads')
-      .getPublicUrl(filename)
+    // Build the file URL (private bucket — path only, not a public URL)
+    const fileUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/document-uploads/${filename}`
 
-    // Create database record
+    // ── 4. Create document record with user_id ────────────────────
+    // supabaseAdmin bypasses RLS for the insert itself, but we
+    // explicitly set user_id so all subsequent RLS-scoped reads work.
     const { data: document, error: dbError } = await supabaseAdmin
       .from('documents')
       .insert({
         name: file.name,
-        file_url: publicUrl,
+        file_url: fileUrl,
         file_size_bytes: file.size,
-        status: 'processing'
+        status: 'processing',
+        user_id: user.id,         // ← RLS ownership stamp
       })
       .select()
       .single()
 
-    if (dbError) {
-      console.error('Database insert error:', dbError)
+    if (dbError || !document) {
+      console.error('[Upload] DB insert error:', dbError)
+      // Attempt storage cleanup so we don't leave orphaned files
+      await supabaseAdmin.storage.from('document-uploads').remove([filename])
       throw new Error('Failed to create document record')
     }
 
-    // Trigger AI ingestion immediately (server-side, not background)
-    console.log(`Triggering ingestion for document ${document.id}`)
-    
-    // Call ingestion API (same server, internal)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    
-    // Don't await - let it run in background
-    fetch(`${baseUrl}/api/ingest`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ documentId: document.id })
-    }).catch(err => {
-      console.error('Failed to trigger ingestion:', err)
-    })
+    console.log(`[Upload] Document created: ${document.id} for user: ${user.id}`)
 
-    console.log('Upload successful:', {
-      documentId: document.id,
-      filename: file.name,
-      size: file.size
+    // ── 5. Trigger ingestion pipeline (direct call, no HTTP hop) ──
+    // Previously this was a fire-and-forget fetch() to /api/ingest.
+    // That approach breaks after adding auth middleware because the
+    // internal server-to-server request has no session cookie.
+    // Direct function call is cleaner: same process, no network, no auth.
+    runIngestionPipeline(document.id).catch((err) => {
+      console.error(`[Upload] Ingestion pipeline failed for ${document.id}:`, err)
     })
 
     return NextResponse.json({
       success: true,
       documentId: document.id,
-      fileUrl: publicUrl,
-      message: 'Upload successful! AI processing started.'
+      fileUrl,
+      message: 'Upload successful! AI processing started.',
     })
-
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      console.error('Upload error:', error)
-      return NextResponse.json(
-        { error: error.message || 'Upload failed' },
-        { status: 500 }
-      )
-    } else {
-      console.error('Upload error:', error)
-      return NextResponse.json(
-        { error: 'Upload failed' },
-        { status: 500 }
-      )
-    }
+    const message = error instanceof Error ? error.message : 'Upload failed'
+    console.error('[Upload] Fatal error:', message)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

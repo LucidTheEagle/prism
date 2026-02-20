@@ -5,17 +5,16 @@ import type { SearchResult, QueryAnalysis } from '@/lib/types'
 /**
  * PRISM Hybrid Search Engine
  * Combines vector semantic search with BM25 keyword search
- * 
- * Checkpoint 3.2: Hybrid Search Engine
+ *
+ * Phase 5.2 update: All search functions now accept an optional userId
+ * parameter to scope results to the authenticated user's data.
+ * This is belt-and-suspenders alongside RLS — defence in depth.
  */
 
 // ============================================================================
 // VECTOR SEARCH (Semantic Similarity)
 // ============================================================================
 
-/**
- * Generate embedding for search query
- */
 export async function generateQueryEmbedding(query: string): Promise<number[]> {
   try {
     const response = await openai.embeddings.create({
@@ -31,7 +30,6 @@ export async function generateQueryEmbedding(query: string): Promise<number[]> {
     }
 
     return embedding
-
   } catch (error) {
     console.error('[Search] Failed to generate query embedding:', error)
     throw new Error('Failed to generate search embedding')
@@ -39,23 +37,27 @@ export async function generateQueryEmbedding(query: string): Promise<number[]> {
 }
 
 /**
- * Perform vector similarity search using pgvector
+ * Perform vector similarity search using pgvector.
+ *
+ * Phase 5.2: Added userId to scope results to the authenticated user.
+ * Passed through to the match_documents_vector RPC function.
  */
 export async function vectorSearch(
   queryEmbedding: number[],
   documentId: string | null,
   limit: number,
-  threshold: number = 0.3
+  threshold: number = 0.3,
+  userId?: string
 ): Promise<SearchResult[]> {
   try {
-    console.log(`[Vector Search] Searching with threshold ${threshold}, limit ${limit}`)
+    console.log(`[Vector Search] threshold=${threshold}, limit=${limit}, userId=${userId ?? 'none'}`)
 
-    // Build RPC call to PostgreSQL function
     const { data, error } = await supabaseAdmin.rpc('match_documents_vector', {
       query_embedding: queryEmbedding,
       match_threshold: threshold,
       match_count: limit,
       filter_document_id: documentId,
+      filter_user_id: userId ?? null,   // ← scopes to user's chunks
     })
 
     if (error) {
@@ -68,7 +70,6 @@ export async function vectorSearch(
       return []
     }
 
-    // Transform to SearchResult format
     const results: SearchResult[] = data.map((row: {
       id: string
       document_id: string
@@ -82,21 +83,23 @@ export async function vectorSearch(
       id: row.id,
       document_id: row.document_id,
       content: row.content,
-      chunk_index: (row.metadata && typeof row.metadata === 'object' && 'chunk_index' in row.metadata)
-        ? (row.metadata as { chunk_index?: number }).chunk_index || 0
-        : 0,
+      chunk_index:
+        row.metadata &&
+        typeof row.metadata === 'object' &&
+        'chunk_index' in row.metadata
+          ? (row.metadata as { chunk_index?: number }).chunk_index ?? 0
+          : 0,
       metadata: row.metadata || {},
       ai_summary: row.ai_summary || null,
       keywords: row.keywords || [],
       semantic_category: row.semantic_category || null,
       vector_similarity: row.similarity,
-      bm25_rank: 0, // Will be filled by BM25 search
-      combined_score: row.similarity, // Will be recalculated in fusion
+      bm25_rank: 0,
+      combined_score: row.similarity,
     }))
 
-    console.log(`[Vector Search] Found ${results.length} results`)
+    console.log(`[Vector Search] ${results.length} results`)
     return results
-
   } catch (error) {
     console.error('[Vector Search] Error:', error)
     throw error
@@ -108,21 +111,24 @@ export async function vectorSearch(
 // ============================================================================
 
 /**
- * Perform BM25 full-text search using PostgreSQL tsvector
+ * Perform BM25 full-text search using PostgreSQL tsvector.
+ *
+ * Phase 5.2: Added userId to scope results to the authenticated user.
  */
 export async function bm25Search(
   query: string,
   documentId: string | null,
-  limit: number
+  limit: number,
+  userId?: string
 ): Promise<SearchResult[]> {
   try {
-    console.log(`[BM25 Search] Searching for: "${query}", limit ${limit}`)
+    console.log(`[BM25 Search] query="${query}", limit=${limit}, userId=${userId ?? 'none'}`)
 
-    // Build RPC call to PostgreSQL function
     const { data, error } = await supabaseAdmin.rpc('match_documents_bm25', {
       query_text: query,
       match_count: limit,
       filter_document_id: documentId,
+      filter_user_id: userId ?? null,   // ← scopes to user's chunks
     })
 
     if (error) {
@@ -135,7 +141,6 @@ export async function bm25Search(
       return []
     }
 
-    // Transform to SearchResult format
     const results: SearchResult[] = data.map((row: {
       id: string
       document_id: string
@@ -149,21 +154,23 @@ export async function bm25Search(
       id: row.id,
       document_id: row.document_id,
       content: row.content,
-      chunk_index: (row.metadata && typeof row.metadata === 'object' && 'chunk_index' in row.metadata)
-        ? (row.metadata as { chunk_index?: number }).chunk_index || 0
-        : 0,
+      chunk_index:
+        row.metadata &&
+        typeof row.metadata === 'object' &&
+        'chunk_index' in row.metadata
+          ? (row.metadata as { chunk_index?: number }).chunk_index ?? 0
+          : 0,
       metadata: row.metadata || {},
       ai_summary: row.ai_summary || null,
       keywords: row.keywords || [],
       semantic_category: row.semantic_category || null,
-      vector_similarity: 0, // Will be filled by vector search
+      vector_similarity: 0,
       bm25_rank: row.rank,
-      combined_score: row.rank, // Will be recalculated in fusion
+      combined_score: row.rank,
     }))
 
-    console.log(`[BM25 Search] Found ${results.length} results`)
+    console.log(`[BM25 Search] ${results.length} results`)
     return results
-
   } catch (error) {
     console.error('[BM25 Search] Error:', error)
     throw error
@@ -174,18 +181,13 @@ export async function bm25Search(
 // RECIPROCAL RANK FUSION (RRF)
 // ============================================================================
 
-/**
- * Combine vector and BM25 results using Reciprocal Rank Fusion
- * RRF formula: score = sum(1 / (k + rank_i)) for each ranking
- * k = 60 is standard constant
- */
 export function reciprocalRankFusion(
   vectorResults: SearchResult[],
   bm25Results: SearchResult[],
   vectorWeight: number = 0.7,
   bm25Weight: number = 0.3
 ): SearchResult[] {
-  const k = 60 // RRF constant
+  const k = 60
   const scoreMap = new Map<string, {
     result: SearchResult
     vectorRank: number
@@ -194,11 +196,9 @@ export function reciprocalRankFusion(
     bm25Score: number
   }>()
 
-  // Process vector results
   vectorResults.forEach((result, index) => {
     const rank = index + 1
     const score = 1 / (k + rank)
-    
     scoreMap.set(result.id, {
       result: { ...result },
       vectorRank: rank,
@@ -208,17 +208,13 @@ export function reciprocalRankFusion(
     })
   })
 
-  // Process BM25 results
   bm25Results.forEach((result, index) => {
     const rank = index + 1
     const score = 1 / (k + rank)
-    
     const existing = scoreMap.get(result.id)
     if (existing) {
-      // Result appears in both - update BM25 info
       existing.bm25Rank = rank
       existing.bm25Score = score
-      // Merge any missing fields
       if (!existing.result.ai_summary && result.ai_summary) {
         existing.result.ai_summary = result.ai_summary
       }
@@ -226,7 +222,6 @@ export function reciprocalRankFusion(
         existing.result.keywords = result.keywords
       }
     } else {
-      // New result only in BM25
       scoreMap.set(result.id, {
         result: { ...result },
         vectorRank: 0,
@@ -237,23 +232,14 @@ export function reciprocalRankFusion(
     }
   })
 
-  // Calculate combined scores with weights
-  const fusedResults: SearchResult[] = Array.from(scoreMap.values()).map(item => {
-    const combinedScore = 
-      (item.vectorScore * vectorWeight) + 
-      (item.bm25Score * bm25Weight)
-    
-    return {
-      ...item.result,
-      combined_score: combinedScore,
-    }
-  })
+  const fusedResults: SearchResult[] = Array.from(scoreMap.values()).map(item => ({
+    ...item.result,
+    combined_score: item.vectorScore * vectorWeight + item.bm25Score * bm25Weight,
+  }))
 
-  // Sort by combined score (highest first)
   fusedResults.sort((a, b) => b.combined_score - a.combined_score)
 
-  console.log(`[RRF] Fused ${fusedResults.length} unique results`)
-  console.log(`[RRF] Weights: Vector ${(vectorWeight * 100).toFixed(0)}% / BM25 ${(bm25Weight * 100).toFixed(0)}%`)
+  console.log(`[RRF] ${fusedResults.length} fused results — Vector ${(vectorWeight * 100).toFixed(0)}% / BM25 ${(bm25Weight * 100).toFixed(0)}%`)
 
   return fusedResults
 }
@@ -263,12 +249,16 @@ export function reciprocalRankFusion(
 // ============================================================================
 
 /**
- * Perform hybrid search combining vector and BM25
+ * Perform hybrid search combining vector and BM25.
+ *
+ * Phase 5.2: Added userId parameter — all sub-searches are now scoped
+ * to the authenticated user's document chunks.
  */
 export async function hybridSearch(
   query: string,
   analysis: QueryAnalysis,
-  documentId: string | null = null
+  documentId: string | null = null,
+  userId?: string              // ← Phase 5.2 addition
 ): Promise<SearchResult[]> {
   const startTime = Date.now()
 
@@ -277,34 +267,32 @@ export async function hybridSearch(
     console.log(`🔍 HYBRID SEARCH`)
     console.log(`Query: "${query}"`)
     console.log(`Strategy: ${(analysis.vector_weight * 100).toFixed(0)}% vector + ${(analysis.bm25_weight * 100).toFixed(0)}% BM25`)
-    console.log(`Target chunks: ${analysis.chunk_count}`)
+    console.log(`User scope: ${userId ?? 'none (unrestricted)'}`)
     console.log(`${'='.repeat(80)}\n`)
 
-    // Step 1: Generate query embedding for vector search
     console.log('[Step 1/4] Generating query embedding...')
     const queryEmbedding = await generateQueryEmbedding(query)
     console.log('✓ Embedding generated (1536 dimensions)')
 
-    // Step 2: Perform vector search
     console.log('\n[Step 2/4] Vector similarity search...')
     const vectorResults = await vectorSearch(
       queryEmbedding,
       documentId,
-      analysis.chunk_count * 2, // Get 2x for better fusion
-      analysis.confidence_threshold
+      analysis.chunk_count * 2,
+      analysis.confidence_threshold,
+      userId                   // ← passed through
     )
-    console.log(`✓ Vector search complete: ${vectorResults.length} results`)
+    console.log(`✓ ${vectorResults.length} vector results`)
 
-    // Step 3: Perform BM25 keyword search
     console.log('\n[Step 3/4] BM25 keyword search...')
     const bm25Results = await bm25Search(
       query,
       documentId,
-      analysis.chunk_count * 2 // Get 2x for better fusion
+      analysis.chunk_count * 2,
+      userId                   // ← passed through
     )
-    console.log(`✓ BM25 search complete: ${bm25Results.length} results`)
+    console.log(`✓ ${bm25Results.length} BM25 results`)
 
-    // Step 4: Fusion ranking
     console.log('\n[Step 4/4] Reciprocal Rank Fusion...')
     const fusedResults = reciprocalRankFusion(
       vectorResults,
@@ -313,32 +301,24 @@ export async function hybridSearch(
       analysis.bm25_weight
     )
 
-    // Limit to requested chunk count
     const finalResults = fusedResults.slice(0, analysis.chunk_count)
-
     const duration = Date.now() - startTime
-    console.log(`\n✅ Hybrid search complete`)
-    console.log(`Results: ${finalResults.length}/${analysis.chunk_count} requested`)
-    console.log(`Duration: ${duration}ms`)
+
+    console.log(`\n✅ Hybrid search complete — ${finalResults.length} results in ${duration}ms`)
     console.log(`${'='.repeat(80)}\n`)
 
     return finalResults
-
   } catch (error) {
     const duration = Date.now() - startTime
-    console.error(`\n❌ Hybrid search failed after ${duration}ms`)
-    console.error(error)
+    console.error(`\n❌ Hybrid search failed after ${duration}ms`, error)
     throw error
   }
 }
 
 // ============================================================================
-// SEARCH RESULT UTILITIES
+// SEARCH RESULT UTILITIES (unchanged)
 // ============================================================================
 
-/**
- * Format search results for citation display
- */
 export function formatResultsForCitations(results: SearchResult[]): Array<{
   chunk_id: string
   document_id: string
@@ -359,9 +339,6 @@ export function formatResultsForCitations(results: SearchResult[]): Array<{
   }))
 }
 
-/**
- * Calculate search quality metrics
- */
 export function calculateSearchMetrics(results: SearchResult[]): {
   avg_combined_score: number
   avg_vector_similarity: number
@@ -379,42 +356,24 @@ export function calculateSearchMetrics(results: SearchResult[]): {
     }
   }
 
-  const avgCombined = results.reduce((sum, r) => sum + r.combined_score, 0) / results.length
-  const avgVector = results.reduce((sum, r) => sum + r.vector_similarity, 0) / results.length
-  const avgBm25 = results.reduce((sum, r) => sum + r.bm25_rank, 0) / results.length
-  const withSummaries = results.filter(r => r.ai_summary && r.ai_summary.length > 0).length
-  const uniquePages = new Set(results.map(r => r.metadata.page || 0)).size
-
   return {
-    avg_combined_score: avgCombined,
-    avg_vector_similarity: avgVector,
-    avg_bm25_rank: avgBm25,
-    results_with_summaries: withSummaries,
-    unique_pages: uniquePages,
+    avg_combined_score: results.reduce((s, r) => s + r.combined_score, 0) / results.length,
+    avg_vector_similarity: results.reduce((s, r) => s + r.vector_similarity, 0) / results.length,
+    avg_bm25_rank: results.reduce((s, r) => s + r.bm25_rank, 0) / results.length,
+    results_with_summaries: results.filter(r => r.ai_summary && r.ai_summary.length > 0).length,
+    unique_pages: new Set(results.map(r => r.metadata.page || 0)).size,
   }
 }
 
-/**
- * Filter results by minimum score threshold
- */
-export function filterByScore(
-  results: SearchResult[],
-  minScore: number
-): SearchResult[] {
+export function filterByScore(results: SearchResult[], minScore: number): SearchResult[] {
   return results.filter(r => r.combined_score >= minScore)
 }
 
-/**
- * Deduplicate results (remove exact duplicates by content)
- */
 export function deduplicateResults(results: SearchResult[]): SearchResult[] {
   const seen = new Set<string>()
   return results.filter(result => {
-    // Use first 200 chars as fingerprint
     const fingerprint = result.content.slice(0, 200).toLowerCase().trim()
-    if (seen.has(fingerprint)) {
-      return false
-    }
+    if (seen.has(fingerprint)) return false
     seen.add(fingerprint)
     return true
   })
