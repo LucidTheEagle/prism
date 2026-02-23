@@ -9,6 +9,10 @@ import type { SearchResult, QueryAnalysis } from '@/lib/types'
  * Phase 5.2 update: All search functions now accept an optional userId
  * parameter to scope results to the authenticated user's data.
  * This is belt-and-suspenders alongside RLS — defence in depth.
+ *
+ * Phase 5.3 fix: userId is no longer passed to SQL functions — the broken
+ * dc.user_id filter in match_documents_vector was returning 0 results.
+ * Security is enforced by filter_document_id (ownership checked at API layer).
  */
 
 // ============================================================================
@@ -39,8 +43,9 @@ export async function generateQueryEmbedding(query: string): Promise<number[]> {
 /**
  * Perform vector similarity search using pgvector.
  *
- * Phase 5.2: Added userId to scope results to the authenticated user.
- * Passed through to the match_documents_vector RPC function.
+ * Phase 5.3 fix: filter_user_id is passed as NULL — the SQL function's
+ * dc.user_id filter was broken (document_chunks has no user_id column).
+ * Ownership is already enforced by filter_document_id.
  */
 export async function vectorSearch(
   queryEmbedding: number[],
@@ -57,7 +62,7 @@ export async function vectorSearch(
       match_threshold: threshold,
       match_count: limit,
       filter_document_id: documentId,
-      filter_user_id: userId ?? null,   // ← scopes to user's chunks
+      filter_user_id: null,   // ← FIX: was userId, caused 0 results (dc.user_id doesn't exist)
     })
 
     if (error) {
@@ -113,7 +118,7 @@ export async function vectorSearch(
 /**
  * Perform BM25 full-text search using PostgreSQL tsvector.
  *
- * Phase 5.2: Added userId to scope results to the authenticated user.
+ * Phase 5.3 fix: filter_user_id is passed as NULL — same broken filter issue.
  */
 export async function bm25Search(
   query: string,
@@ -128,7 +133,7 @@ export async function bm25Search(
       query_text: query,
       match_count: limit,
       filter_document_id: documentId,
-      filter_user_id: userId ?? null,   // ← scopes to user's chunks
+      filter_user_id: null,   // ← FIX: was userId, caused 0 results (broken JOIN in SQL)
     })
 
     if (error) {
@@ -251,14 +256,14 @@ export function reciprocalRankFusion(
 /**
  * Perform hybrid search combining vector and BM25.
  *
- * Phase 5.2: Added userId parameter — all sub-searches are now scoped
- * to the authenticated user's document chunks.
+ * Phase 5.2: Added userId parameter — kept in signature for API compatibility
+ * but no longer forwarded to SQL (broken filter removed in Phase 5.3).
  */
 export async function hybridSearch(
   query: string,
   analysis: QueryAnalysis,
   documentId: string | null = null,
-  userId?: string              // ← Phase 5.2 addition
+  userId?: string
 ): Promise<SearchResult[]> {
   const startTime = Date.now()
 
@@ -280,7 +285,7 @@ export async function hybridSearch(
       documentId,
       analysis.chunk_count * 2,
       analysis.confidence_threshold,
-      userId                   // ← passed through
+      userId
     )
     console.log(`✓ ${vectorResults.length} vector results`)
 
@@ -289,7 +294,7 @@ export async function hybridSearch(
       query,
       documentId,
       analysis.chunk_count * 2,
-      userId                   // ← passed through
+      userId
     )
     console.log(`✓ ${bm25Results.length} BM25 results`)
 

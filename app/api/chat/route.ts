@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
 import { analyzeQuery } from '@/lib/ai/query-analysis'
-import { hybridSearch, deduplicateResults } from '@/lib/ai/hybrid-search'
+import { deduplicateResults, bm25Search, vectorSearch, generateQueryEmbedding, reciprocalRankFusion } from '@/lib/ai/hybrid-search'
 import { rerankSearchResults } from '@/lib/ai/reranking'
 import { generateMultiPassAnswer } from '@/lib/ai/answer-generation'
 
@@ -76,7 +76,6 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Ownership check — belt-and-suspenders alongside RLS
       if (document.user_id !== user.id) {
         return NextResponse.json(
           { error: 'Forbidden. You do not have access to this document.' },
@@ -96,17 +95,51 @@ export async function POST(request: NextRequest) {
     // ── 4. Query Analysis ─────────────────────────────────────────
     console.log('[Step 1/5] Analyzing query...')
     const analysis = await analyzeQuery(query, documentContext)
+
+    // FIX: Clamp threshold to 0.3 — query-analysis returns 0.6+ for
+    // legal/factual queries but pgvector cosine scores rarely exceed 0.85.
+    const originalThreshold = analysis.confidence_threshold
+    analysis.confidence_threshold = Math.min(analysis.confidence_threshold, 0.3)
+    console.log(`[Threshold] Clamped ${originalThreshold} → ${analysis.confidence_threshold}`)
     console.log(`✓ Query type: ${analysis.query_type}`)
 
     // ── 5. Hybrid Search ──────────────────────────────────────────
+    // FIX: BM25 was receiving the full question sentence which gets
+    // decimated by plainto_tsquery stop-word removal. Instead we use
+    // key_terms extracted by query analysis — short, meaningful tokens
+    // that survive tsquery parsing and actually match chunk content.
     console.log('\n[Step 2/5] Performing hybrid search...')
-    let searchResults = await hybridSearch(
-      query,
-      analysis,
+
+    const bm25Query = analysis.key_terms.length > 0
+      ? analysis.key_terms.join(' ')
+      : query
+
+    console.log(`[BM25] Using key terms: "${bm25Query}"`)
+
+    // Run embedding generation and BM25 in parallel for speed
+    const [queryEmbedding, bm25Results] = await Promise.all([
+      generateQueryEmbedding(query),
+      bm25Search(bm25Query, documentId || null, analysis.chunk_count * 2, user.id),
+    ])
+
+    const vectorResults = await vectorSearch(
+      queryEmbedding,
       documentId || null,
-      user.id  // scope search to this user's chunks only
+      analysis.chunk_count * 2,
+      analysis.confidence_threshold,
+      user.id
     )
-    searchResults = deduplicateResults(searchResults)
+
+    console.log(`[Vector] ${vectorResults.length} results, [BM25] ${bm25Results.length} results`)
+
+    const fused = reciprocalRankFusion(
+      vectorResults,
+      bm25Results,
+      analysis.vector_weight,
+      analysis.bm25_weight
+    )
+
+    let searchResults = deduplicateResults(fused.slice(0, analysis.chunk_count))
     console.log(`✓ ${searchResults.length} unique results`)
 
     if (searchResults.length === 0) {
@@ -136,12 +169,9 @@ export async function POST(request: NextRequest) {
     console.log(`✓ Answer generated (${multiPassResult.total_passes} passes)`)
 
     // ── 8. Persist chat message ───────────────────────────────────
-    // Store the exchange in chat_messages with user_id so history
-    // is scoped to this user and RLS policies are satisfied.
     const { error: msgError } = await supabaseAdmin
       .from('chat_messages')
       .insert([
-        // User message
         {
           document_id: documentId || null,
           user_id: user.id,
@@ -150,7 +180,6 @@ export async function POST(request: NextRequest) {
           confidence: null,
           citations: null,
         },
-        // Assistant message
         {
           document_id: documentId || null,
           user_id: user.id,
@@ -162,7 +191,6 @@ export async function POST(request: NextRequest) {
       ])
 
     if (msgError) {
-      // Non-fatal — log but don't fail the response
       console.error('[Chat] Failed to persist message:', msgError.message)
     }
 

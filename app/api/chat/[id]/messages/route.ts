@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase/server'
+import { supabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
 
 /**
  * GET /api/chat/[id]/messages
@@ -70,6 +70,21 @@ export async function POST(
       )
     }
 
+    // ── Auth: get user so we can stamp user_id on the row ─────────
+    // chat_messages.user_id is NOT NULL — inserts without it will 500.
+    const supabase = await createSupabaseServerClient()
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Please sign in.' },
+        { status: 401 }
+      )
+    }
+
     const body = await request.json()
     const { role, content, confidence, citations } = body
 
@@ -84,6 +99,7 @@ export async function POST(
       .from('chat_messages')
       .insert({
         document_id: id,
+        user_id: user.id,   // ← FIX: was missing, caused 500 on every insert
         role,
         content,
         confidence: confidence ?? null,
@@ -93,6 +109,7 @@ export async function POST(
       .single()
 
     if (error) {
+      console.error('[Messages] Insert error:', error.message)
       return NextResponse.json(
         { error: error.message },
         { status: 500 }

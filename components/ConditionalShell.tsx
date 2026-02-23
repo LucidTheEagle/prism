@@ -190,9 +190,16 @@ export default function ConditionalShell({ children }: { children: React.ReactNo
        * "Sign In has a focus border" bug. focus: applies on mouse click too.
        * focus-visible: only applies for keyboard navigation.
        */}
+      {/*
+       * Skip link — absolute -top-full moves it off-screen above the header.
+       * focus:top-4 brings it into view only when keyboard-focused (Tab key).
+       * focus-visible:not-sr-only does NOT work in Tailwind's default build
+       * because the focus-visible variant of not-sr-only isn't generated.
+       * This approach works reliably across all browsers.
+       */}
       <a
         href="#main-content"
-        className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-4 focus-visible:left-4 focus-visible:z-[100] focus-visible:px-4 focus-visible:py-2 focus-visible:bg-emerald-600 focus-visible:text-white focus-visible:rounded-lg focus-visible:text-sm focus-visible:font-medium focus-visible:shadow-lg"
+        className="absolute left-4 -top-full z-[100] px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium shadow-lg focus:top-4"
       >
         Skip to main content
       </a>
