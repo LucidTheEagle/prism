@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
 import { runIngestionPipeline } from '@/lib/ai/ingestion-pipeline'
+import { waitUntil } from '@vercel/functions'
 
 /**
  * POST /api/upload
@@ -12,6 +13,10 @@ import { runIngestionPipeline } from '@/lib/ai/ingestion-pipeline'
  *
  * Auth: Required. user_id is extracted from the session cookie and
  * stamped on the document row so RLS policies enforce ownership.
+ *
+ * Phase 5.4 fix: replaced fire-and-forget runIngestionPipeline() call
+ * with waitUntil() — Vercel was killing the function immediately after
+ * the response was sent, so the pipeline never completed past Step 1.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -52,9 +57,6 @@ export async function POST(request: NextRequest) {
     }
 
     // ── 3. Upload to Supabase Storage ─────────────────────────────
-    // Storage uses supabaseAdmin — the bucket is private and signed
-    // URL generation is controlled server-side. The user_id prefix
-    // in the filename creates a logical namespace per user.
     const timestamp = Date.now()
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
     const filename = `${user.id}_${timestamp}_${sanitizedName}`
@@ -74,12 +76,9 @@ export async function POST(request: NextRequest) {
       throw new Error('Failed to upload file to storage')
     }
 
-    // Build the file URL (private bucket — path only, not a public URL)
     const fileUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/document-uploads/${filename}`
 
     // ── 4. Create document record with user_id ────────────────────
-    // supabaseAdmin bypasses RLS for the insert itself, but we
-    // explicitly set user_id so all subsequent RLS-scoped reads work.
     const { data: document, error: dbError } = await supabaseAdmin
       .from('documents')
       .insert({
@@ -87,28 +86,29 @@ export async function POST(request: NextRequest) {
         file_url: fileUrl,
         file_size_bytes: file.size,
         status: 'processing',
-        user_id: user.id,         // ← RLS ownership stamp
+        user_id: user.id,
       })
       .select()
       .single()
 
     if (dbError || !document) {
       console.error('[Upload] DB insert error:', dbError)
-      // Attempt storage cleanup so we don't leave orphaned files
       await supabaseAdmin.storage.from('document-uploads').remove([filename])
       throw new Error('Failed to create document record')
     }
 
     console.log(`[Upload] Document created: ${document.id} for user: ${user.id}`)
 
-    // ── 5. Trigger ingestion pipeline (direct call, no HTTP hop) ──
-    // Previously this was a fire-and-forget fetch() to /api/ingest.
-    // That approach breaks after adding auth middleware because the
-    // internal server-to-server request has no session cookie.
-    // Direct function call is cleaner: same process, no network, no auth.
-    runIngestionPipeline(document.id).catch((err) => {
-      console.error(`[Upload] Ingestion pipeline failed for ${document.id}:`, err)
-    })
+    // ── 5. Trigger ingestion pipeline ─────────────────────────────
+    // FIX: Use waitUntil() so Vercel keeps the function alive until
+    // the pipeline completes. The old fire-and-forget .catch() pattern
+    // caused Vercel to kill the process after the response was sent,
+    // meaning the pipeline always died after Step 1.
+    waitUntil(
+      runIngestionPipeline(document.id).catch((err) => {
+        console.error(`[Upload] Ingestion pipeline failed for ${document.id}:`, err)
+      })
+    )
 
     return NextResponse.json({
       success: true,
