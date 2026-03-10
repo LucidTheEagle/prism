@@ -5,6 +5,7 @@ import { exportConversation } from '@/lib/utils/export'
 import { ChatHeader } from './chat/ChatHeader'
 import { ChatMessages } from './chat/ChatMessages'
 import { ChatInput } from './chat/ChatInput'
+import { UpgradeModal } from './UpgradeModal'
 
 // ── Types (shared across subcomponents via re-export) ──────────────────────
 export interface Citation {
@@ -68,6 +69,19 @@ export default function ChatInterface({
   const [historyLoading, setHistoryLoading] = useState(true)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
+
+  // Upgrade modal state
+  const [upgradeModal, setUpgradeModal] = useState<{
+    open: boolean
+    code: 'QUERY_LIMIT_REACHED' | 'UPLOAD_LIMIT_REACHED'
+    tier: 'free' | 'pro' | 'enterprise'
+    limit?: number
+    current?: number
+  }>({
+    open: false,
+    code: 'QUERY_LIMIT_REACHED',
+    tier: 'free',
+  })
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -183,11 +197,34 @@ export default function ChatInterface({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: userMessage.content, documentId: activeDocumentId || undefined }),
       })
-      if (response.status === 401) { setSubmitError('Session expired. Please sign in again.'); return }
+
+      if (response.status === 401) {
+        setSubmitError('Session expired. Please sign in again.')
+        return
+      }
+
+      if (response.status === 403) {
+        const errData = await response.json().catch(() => ({}))
+        if (errData.upgrade_required) {
+          setUpgradeModal({
+            open: true,
+            code: errData.code ?? 'QUERY_LIMIT_REACHED',
+            tier: errData.tier ?? 'free',
+            limit: errData.limit,
+            current: errData.current,
+          })
+          // Remove the optimistic user message — query was never processed
+          setMessages(prev => prev.filter(m => m.id !== userMessage.id))
+          return
+        }
+        throw new Error(errData.error || 'Access denied')
+      }
+
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}))
         throw new Error(errData.error || `Request failed (${response.status})`)
       }
+
       const data = await response.json()
       if (data.success) {
         const assistantMessage: Message = {
@@ -252,6 +289,19 @@ export default function ChatInterface({
         onInputChange={setInput}
         onSubmit={handleSubmit}
         onDismissError={() => setSubmitError(null)}
+      />
+
+      <UpgradeModal
+        open={upgradeModal.open}
+        code={upgradeModal.code}
+        currentTier={upgradeModal.tier}
+        limit={upgradeModal.limit}
+        current={upgradeModal.current}
+        onClose={() => setUpgradeModal(prev => ({ ...prev, open: false }))}
+        onUpgrade={() => {
+          setUpgradeModal(prev => ({ ...prev, open: false }))
+          window.location.href = '/billing'
+        }}
       />
 
     </div>
