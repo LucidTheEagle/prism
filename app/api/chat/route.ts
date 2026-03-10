@@ -160,14 +160,11 @@ export async function POST(request: NextRequest) {
     console.log(`✓ Answer generated (${multiPassResult.total_passes} passes)`)
 
     // ── 9. Track usage (non-blocking) ────────────────────────────
-    // Token counts are approximate — answer-generation does not currently
-    // return exact token usage from the OpenAI response object.
-    // Sprint 5 will wire up precise token tracking from the API response.
     trackQuery({
       userId: user.id,
       subscription,
-      tokensInput: 0,
-      tokensOutput: 0,
+      tokensInput: multiPassResult.tokens_input,
+      tokensOutput: multiPassResult.tokens_output,
     }).catch((err) => console.error('[Chat] Usage tracking failed:', err))
 
     // ── 10. Persist chat message ──────────────────────────────────

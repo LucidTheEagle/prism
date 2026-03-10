@@ -2,15 +2,8 @@ import { openai, MODELS } from '@/lib/openai/client'
 import type { SearchResult, Citation, AnswerGeneration } from '@/lib/types'
 import { critiqueAnswer, type SelfCritique } from './self-critique'
 
-/**
- * PRISM Multi-Pass Answer Generation System
- * Generates, critiques, and refines answers with citations
- * 
- * Checkpoint 3.4: Multi-Pass Answer Generation (refactored with 3.5)
- */
-
 export interface GenerationConfig {
-  max_answer_length?: number    // Max words in answer
+  max_answer_length?: number
   citation_style?: 'inline' | 'endnotes'
   include_reasoning?: boolean
   temperature?: number
@@ -27,21 +20,17 @@ export const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
 // PASS 1: INITIAL ANSWER GENERATION
 // ============================================================================
 
-/**
- * Generate initial answer from search results
- */
 export async function generateInitialAnswer(
   query: string,
   searchResults: SearchResult[],
   config: GenerationConfig = DEFAULT_GENERATION_CONFIG
-): Promise<AnswerGeneration> {
+): Promise<{ result: AnswerGeneration; tokens_input: number; tokens_output: number }> {
   const startTime = Date.now()
 
-  console.log(`\n[Pass 1] Generating initial answer...`)
+  console.log(`[Pass 1] Generating initial answer...`)
   console.log(`[Pass 1] Using ${searchResults.length} search results`)
 
   try {
-    // Build context from search results
     const context = searchResults
       .map((result, index) => {
         return `SOURCE ${index + 1}:
@@ -110,7 +99,9 @@ Return ONLY the JSON object, no markdown, no explanation.`
       throw new Error('No response from GPT-4')
     }
 
-    // Clean and parse
+    const tokens_input = response.usage?.prompt_tokens ?? 0
+    const tokens_output = response.usage?.completion_tokens ?? 0
+
     const cleanedContent = content
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
@@ -123,8 +114,6 @@ Return ONLY the JSON object, no markdown, no explanation.`
       reasoning: string
     }
 
-    // 🦅 LUCID FIX: Use reduce for type-safe filtering
-    // This avoids the "Type null is not assignable" error completely
     const citations: Citation[] = parsed.citations.reduce<Citation[]>((acc, cite) => {
       const sourceIndex = cite.source_number - 1
       const source = searchResults[sourceIndex]
@@ -133,10 +122,10 @@ Return ONLY the JSON object, no markdown, no explanation.`
         acc.push({
           chunk_id: source.id,
           document_id: source.document_id,
-          text: source.content.slice(0, 200), // First 200 chars
+          text: source.content.slice(0, 200),
           page: source.metadata.page || 1,
           relevance: source.reranked_score || source.combined_score,
-          ai_summary: source.ai_summary || undefined, // undefined matches optional type
+          ai_summary: source.ai_summary || undefined,
           chunk_index: source.chunk_index,
         })
       } else {
@@ -156,11 +145,9 @@ Return ONLY the JSON object, no markdown, no explanation.`
       generation_time_ms: duration,
     }
 
-    console.log(`[Pass 1] ✅ Initial answer generated (${duration}ms)`)
-    console.log(`[Pass 1] Confidence: ${(result.confidence_score * 100).toFixed(0)}%`)
-    console.log(`[Pass 1] Citations: ${result.sources_used}`)
+    console.log(`[Pass 1] Complete (${duration}ms) | confidence: ${(result.confidence_score * 100).toFixed(0)}% | tokens: ${tokens_input}in/${tokens_output}out`)
 
-    return result
+    return { result, tokens_input, tokens_output }
 
   } catch (error) {
     console.error('[Pass 1] Generation error:', error)
@@ -172,18 +159,15 @@ Return ONLY the JSON object, no markdown, no explanation.`
 // PASS 3: REFINEMENT
 // ============================================================================
 
-/**
- * Refine answer based on critique
- */
 export async function refineAnswer(
   query: string,
   initialAnswer: AnswerGeneration,
   critique: SelfCritique,
   searchResults: SearchResult[]
-): Promise<AnswerGeneration> {
+): Promise<{ result: AnswerGeneration; tokens_input: number; tokens_output: number }> {
   const startTime = Date.now()
 
-  console.log(`\n[Pass 3] Refining answer based on critique...`)
+  console.log(`[Pass 3] Refining answer based on critique...`)
 
   try {
     const context = searchResults
@@ -252,6 +236,9 @@ Return ONLY the JSON object.`
       throw new Error('No response from GPT-4')
     }
 
+    const tokens_input = response.usage?.prompt_tokens ?? 0
+    const tokens_output = response.usage?.completion_tokens ?? 0
+
     const cleanedContent = content
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
@@ -264,7 +251,6 @@ Return ONLY the JSON object.`
       reasoning: string
     }
 
-    // 🦅 LUCID FIX: Use reduce here as well for consistency
     const citations: Citation[] = parsed.citations.reduce<Citation[]>((acc, cite) => {
       const sourceIndex = cite.source_number - 1
       const source = searchResults[sourceIndex]
@@ -294,17 +280,13 @@ Return ONLY the JSON object.`
       generation_time_ms: duration,
     }
 
-    console.log(`[Pass 3] ✅ Refinement complete (${duration}ms)`)
-    console.log(`[Pass 3] Final confidence: ${(result.confidence_score * 100).toFixed(0)}%`)
+    console.log(`[Pass 3] Complete (${duration}ms) | confidence: ${(result.confidence_score * 100).toFixed(0)}% | tokens: ${tokens_input}in/${tokens_output}out`)
 
-    return result
+    return { result, tokens_input, tokens_output }
 
   } catch (error) {
-    console.error('[Pass 3] Refinement error:', error)
-    
-    // Return initial answer if refinement fails
-    console.log('[Pass 3] Falling back to initial answer')
-    return initialAnswer
+    console.error('[Pass 3] Refinement error, falling back to initial answer:', error)
+    return { result: initialAnswer, tokens_input: 0, tokens_output: 0 }
   }
 }
 
@@ -320,11 +302,10 @@ export interface MultiPassResult {
   was_revised: boolean
   total_time_ms: number
   cost_estimate: number
+  tokens_input: number
+  tokens_output: number
 }
 
-/**
- * Execute complete multi-pass answer generation
- */
 export async function generateMultiPassAnswer(
   query: string,
   searchResults: SearchResult[],
@@ -332,41 +313,46 @@ export async function generateMultiPassAnswer(
 ): Promise<MultiPassResult> {
   const startTime = Date.now()
 
-  console.log(`\n${'='.repeat(80)}`)
-  console.log(`🧠 MULTI-PASS ANSWER GENERATION`)
+  console.log(`${'='.repeat(80)}`)
+  console.log(`MULTI-PASS ANSWER GENERATION`)
   console.log(`Query: "${query}"`)
   console.log(`Sources: ${searchResults.length} chunks`)
   console.log(`${'='.repeat(80)}`)
 
   try {
-    // PASS 1: Generate initial answer
-    const initialAnswer = await generateInitialAnswer(query, searchResults, config)
+    // Pass 1
+    const { result: initialAnswer, tokens_input: p1in, tokens_output: p1out } =
+      await generateInitialAnswer(query, searchResults, config)
 
-    // PASS 2: Critique (now imported from self-critique.ts!)
+    // Pass 2
     const critique = await critiqueAnswer(query, initialAnswer, searchResults)
 
-    // PASS 3: Refine (if needed)
+    // Pass 3 — conditional
     let finalAnswer = initialAnswer
     let wasRevised = false
+    let p3in = 0
+    let p3out = 0
 
     if (critique.should_revise) {
-      console.log(`\n[Decision] Critique score ${(critique.overall_score * 100).toFixed(0)}% → REVISING`)
-      finalAnswer = await refineAnswer(query, initialAnswer, critique, searchResults)
+      console.log(`[Decision] Critique score ${(critique.overall_score * 100).toFixed(0)}% — revising`)
+      const { result: refined, tokens_input, tokens_output } =
+        await refineAnswer(query, initialAnswer, critique, searchResults)
+      finalAnswer = refined
       wasRevised = true
+      p3in = tokens_input
+      p3out = tokens_output
     } else {
-      console.log(`\n[Decision] Critique score ${(critique.overall_score * 100).toFixed(0)}% → NO REVISION NEEDED`)
+      console.log(`[Decision] Critique score ${(critique.overall_score * 100).toFixed(0)}% — no revision needed`)
     }
 
     const totalTime = Date.now() - startTime
+    const totalTokensInput = p1in + p3in
+    const totalTokensOutput = p1out + p3out
     const costEstimate = estimateGenerationCost(searchResults.length, wasRevised)
 
-    console.log(`\n${'='.repeat(80)}`)
-    console.log(`✅ MULTI-PASS COMPLETE`)
-    console.log(`Total time: ${(totalTime / 1000).toFixed(2)}s`)
-    console.log(`Passes: ${wasRevised ? 3 : 2}`)
-    console.log(`Final confidence: ${(finalAnswer.confidence_score * 100).toFixed(0)}%`)
-    console.log(`Cost estimate: $${costEstimate.toFixed(6)}`)
-    console.log(`${'='.repeat(80)}\n`)
+    console.log(`${'='.repeat(80)}`)
+    console.log(`MULTI-PASS COMPLETE | ${(totalTime / 1000).toFixed(2)}s | passes: ${wasRevised ? 3 : 2} | confidence: ${(finalAnswer.confidence_score * 100).toFixed(0)}% | tokens: ${totalTokensInput}in/${totalTokensOutput}out | cost: $${costEstimate.toFixed(6)}`)
+    console.log(`${'='.repeat(80)}`)
 
     return {
       initial_answer: initialAnswer,
@@ -376,25 +362,21 @@ export async function generateMultiPassAnswer(
       was_revised: wasRevised,
       total_time_ms: totalTime,
       cost_estimate: costEstimate,
+      tokens_input: totalTokensInput,
+      tokens_output: totalTokensOutput,
     }
 
   } catch (error) {
-    console.error('\n❌ Multi-pass generation failed:', error)
+    console.error('Multi-pass generation failed:', error)
     throw error
   }
 }
 
-/**
- * Estimate generation cost
- */
 function estimateGenerationCost(sourceCount: number, wasRevised: boolean): number {
-  // Rough estimate for GPT-4 Turbo
-  const pass1Cost = (sourceCount * 200 + 500) * 0.00001 // Input + output
+  const pass1Cost = (sourceCount * 200 + 500) * 0.00001
   const pass2Cost = (sourceCount * 100 + 200) * 0.00001
   const pass3Cost = wasRevised ? (sourceCount * 200 + 500) * 0.00001 : 0
-  
   return pass1Cost + pass2Cost + pass3Cost
 }
 
-// Re-export SelfCritique type for convenience
 export type { SelfCritique }
