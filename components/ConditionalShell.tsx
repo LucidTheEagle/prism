@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { LogOut, User, ChevronDown } from 'lucide-react'
+import { LogOut, User, ChevronDown, CreditCard } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
@@ -93,6 +93,7 @@ function UserMenu({ user }: { user: SupabaseUser }) {
             <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{displayName}</p>
             <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{user.email}</p>
           </div>
+
           <button
             role="menuitem"
             onClick={() => setOpen(false)}
@@ -101,6 +102,17 @@ function UserMenu({ user }: { user: SupabaseUser }) {
             <User className="w-4 h-4" aria-hidden="true" />
             Profile
           </button>
+
+          <Link
+            href="/billing"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:bg-slate-50 dark:focus-visible:bg-slate-800 min-h-[44px]"
+          >
+            <CreditCard className="w-4 h-4" aria-hidden="true" />
+            Billing
+          </Link>
+
           <button
             role="menuitem"
             onClick={handleSignOut}
@@ -121,12 +133,6 @@ export default function ConditionalShell({ children }: { children: React.ReactNo
 
   const isChatRoute = pathname?.startsWith('/chat')
 
-  /*
-   * Auth routes: render children only — no header, no footer.
-   * This is what was causing the double PRISM logo: ConditionalShell
-   * was rendering the header (with its logo) on top of the login page
-   * which has its own PRISM wordmark. Auth pages own their full layout.
-   */
   const isAuthRoute =
     pathname?.startsWith('/login') ||
     pathname?.startsWith('/register') ||
@@ -151,12 +157,6 @@ export default function ConditionalShell({ children }: { children: React.ReactNo
     return () => subscription.unsubscribe()
   }, [loadUser, supabase])
 
-  /*
-   * "How it works" smooth scroll.
-   * Next.js does not smooth-scroll to same-page hash anchors — it does a
-   * hard jump. We intercept the click, find the section by ID, and call
-   * scrollIntoView. If not on the home page, we navigate there first.
-   */
   const handleHowItWorksClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     const section = document.getElementById('how-it-works')
@@ -176,7 +176,7 @@ export default function ConditionalShell({ children }: { children: React.ReactNo
     )
   }
 
-  // ── AUTH: completely bare — no header, no footer, no extra logo ───────────
+  // ── AUTH: completely bare ─────────────────────────────────────────────────
   if (isAuthRoute) {
     return <>{children}</>
   }
@@ -184,22 +184,9 @@ export default function ConditionalShell({ children }: { children: React.ReactNo
   // ── EVERYTHING ELSE: full header + footer chrome ──────────────────────────
   return (
     <>
-      {/*
-       * Skip link — ONLY appears on keyboard Tab, never on mouse click.
-       * Uses focus-visible (not focus) — this was the cause of the
-       * "Sign In has a focus border" bug. focus: applies on mouse click too.
-       * focus-visible: only applies for keyboard navigation.
-       */}
-      {/*
-       * Skip link — absolute -top-full moves it off-screen above the header.
-       * focus:top-4 brings it into view only when keyboard-focused (Tab key).
-       * focus-visible:not-sr-only does NOT work in Tailwind's default build
-       * because the focus-visible variant of not-sr-only isn't generated.
-       * This approach works reliably across all browsers.
-       */}
       <a
         href="#main-content"
-        className="absolute left-4 -top-full z-[100] px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium shadow-lg focus:top-4"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-emerald-600 focus:text-white focus:text-sm focus:font-medium focus:shadow-lg"
       >
         Skip to main content
       </a>
@@ -228,11 +215,6 @@ export default function ConditionalShell({ children }: { children: React.ReactNo
 
           <nav className="flex items-center gap-2 sm:gap-4" aria-label="Site navigation">
 
-            {/*
-             * Changed from <Link href="/#how-it-works"> to a <button> with
-             * onClick. Next.js hash navigation doesn't smooth scroll —
-             * it snaps. The handler above uses scrollIntoView instead.
-             */}
             <button
               onClick={handleHowItWorksClick}
               className="text-sm text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors hidden md:block font-medium rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
@@ -278,13 +260,6 @@ export default function ConditionalShell({ children }: { children: React.ReactNo
         </div>
       </header>
 
-      {/*
-       * pb-8: breathing room so content doesn't sit flush against the footer.
-       * Footer is now in normal document flow (not fixed/sticky) — the
-       * fixed footer was sitting on top of interactive elements near the
-       * bottom of the viewport and intercepting clicks on the upload zone,
-       * form inputs, and buttons.
-       */}
       <main id="main-content" className="min-h-[calc(100vh-4rem)] pb-8">
         {children}
       </main>
