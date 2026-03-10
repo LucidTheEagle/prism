@@ -344,3 +344,104 @@ export type SemanticCategory =
   | 'general_provision'
   | 'signature'
   | 'other'
+
+  // ============================================================================
+// BILLING TYPES (v1.1)
+// ============================================================================
+
+export type SubscriptionStatus =
+| 'free'
+| 'active'
+| 'trialing'
+| 'past_due'
+| 'canceled'
+| 'incomplete'
+
+export type SubscriptionTier = 'free' | 'pro' | 'enterprise'
+
+export type AuditEventType =
+| 'document_upload'
+| 'document_query'
+| 'document_view'
+| 'pdf_stream'
+| 'citation_click'
+| 'document_delete'
+| 'subscription_change'
+
+export interface Subscription {
+id: string
+user_id: string
+stripe_customer_id: string | null
+stripe_subscription_id: string | null
+status: SubscriptionStatus
+price_id: string | null
+tier: SubscriptionTier
+current_period_start: string | null
+current_period_end: string | null
+cancel_at_period_end: boolean
+created_at: string
+updated_at: string
+}
+
+export interface UsageTracking {
+id: string
+user_id: string
+period_start: string
+period_end: string
+query_count: number
+document_count: number
+tokens_consumed: number
+tokens_input: number
+tokens_output: number
+created_at: string
+updated_at: string
+}
+
+export interface AuditLog {
+id: string
+user_id: string
+document_id: string | null
+event_type: AuditEventType
+query_text: string | null
+response_confidence: number | null
+chunks_accessed: number
+ip_address: string | null
+user_agent: string | null
+duration_ms: number | null
+metadata: Record<string, unknown>
+created_at: string
+}
+
+// Tier limits — single source of truth
+export const TIER_LIMITS: Record<SubscriptionTier, {
+document_limit: number | null   // null = unlimited
+query_limit: number | null      // null = unlimited
+file_size_limit_mb: number
+label: string
+}> = {
+free: {
+  document_limit: 3,
+  query_limit: 20,
+  file_size_limit_mb: 10,
+  label: 'Free'
+},
+pro: {
+  document_limit: 25,
+  query_limit: null,
+  file_size_limit_mb: 50,
+  label: 'Pro'
+},
+enterprise: {
+  document_limit: null,
+  query_limit: null,
+  file_size_limit_mb: 500,
+  label: 'Enterprise'
+}
+}
+
+// Price ID constants — swap mock values for real Stripe price IDs at go-live
+export const PRICE_IDS = {
+free: process.env.STRIPE_PRICE_FREE ?? 'price_free_mock_2026',
+pro: process.env.STRIPE_PRICE_PRO ?? 'price_pro_mock_2026',
+enterprise: process.env.STRIPE_PRICE_ENTERPRISE ?? 'price_enterprise_mock_2026',
+} as const
