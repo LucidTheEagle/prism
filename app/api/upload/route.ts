@@ -2,30 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
 import { runIngestionPipeline } from '@/lib/ai/ingestion-pipeline'
 import { waitUntil } from '@vercel/functions'
+import { getSubscription } from '@/lib/billing/getSubscription'
+import { checkUploadAccess } from '@/lib/billing/checkAccess'
+import { trackDocumentUpload } from '@/lib/billing/trackUsage'
+import { TIER_LIMITS } from '@/lib/types'
 
-/**
- * POST /api/upload
- *
- * Accepts a PDF file, uploads it to Supabase Storage, creates a
- * document record owned by the authenticated user, then kicks off
- * the ingestion pipeline directly (no internal HTTP hop — avoids
- * auth complexity between server-to-server calls).
- *
- * Auth: Required. user_id is extracted from the session cookie and
- * stamped on the document row so RLS policies enforce ownership.
- *
- * Phase 5.4 fix: replaced fire-and-forget runIngestionPipeline() call
- * with waitUntil() — Vercel was killing the function immediately after
- * the response was sent, so the pipeline never completed past Step 1.
- */
 export async function POST(request: NextRequest) {
   try {
-    // ── 1. Authenticate the request ───────────────────────────────
+    // ── 1. Authenticate ───────────────────────────────────────────
     const supabase = await createSupabaseServerClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
       return NextResponse.json(
@@ -34,7 +20,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ── 2. Parse and validate the form data ───────────────────────
+    // ── 2. Subscription + access check ───────────────────────────
+    const subscription = await getSubscription(user.id)
+    const access = await checkUploadAccess(subscription, user.id)
+
+    if (!access.allowed) {
+      return NextResponse.json(
+        {
+          error: access.reason,
+          code: 'UPLOAD_LIMIT_REACHED',
+          tier: access.tier,
+          limit: access.limit,
+          current: access.current,
+          upgrade_required: true,
+        },
+        { status: 403 }
+      )
+    }
+
+    // ── 3. Parse and validate form data ───────────────────────────
     const formData = await request.formData()
     const file = formData.get('file') as File
 
@@ -49,14 +53,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (file.size > 50 * 1024 * 1024) {
+    // Enforce tier file size limit
+    const fileSizeLimitBytes = TIER_LIMITS[subscription.tier].file_size_limit_mb * 1024 * 1024
+    if (file.size > fileSizeLimitBytes) {
       return NextResponse.json(
-        { error: 'File exceeds 50MB limit' },
+        {
+          error: `File exceeds the ${TIER_LIMITS[subscription.tier].file_size_limit_mb}MB limit for the ${TIER_LIMITS[subscription.tier].label} plan.`,
+          code: 'FILE_TOO_LARGE',
+          tier: subscription.tier,
+          upgrade_required: subscription.tier !== 'enterprise',
+        },
         { status: 400 }
       )
     }
 
-    // ── 3. Upload to Supabase Storage ─────────────────────────────
+    // ── 4. Upload to Supabase Storage ─────────────────────────────
     const timestamp = Date.now()
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
     const filename = `${user.id}_${timestamp}_${sanitizedName}`
@@ -78,7 +89,7 @@ export async function POST(request: NextRequest) {
 
     const fileUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/document-uploads/${filename}`
 
-    // ── 4. Create document record with user_id ────────────────────
+    // ── 5. Create document record ─────────────────────────────────
     const { data: document, error: dbError } = await supabaseAdmin
       .from('documents')
       .insert({
@@ -99,15 +110,14 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Upload] Document created: ${document.id} for user: ${user.id}`)
 
-    // ── 5. Trigger ingestion pipeline ─────────────────────────────
-    // FIX: Use waitUntil() so Vercel keeps the function alive until
-    // the pipeline completes. The old fire-and-forget .catch() pattern
-    // caused Vercel to kill the process after the response was sent,
-    // meaning the pipeline always died after Step 1.
+    // ── 6. Track usage + trigger ingestion ────────────────────────
     waitUntil(
-      runIngestionPipeline(document.id).catch((err) => {
-        console.error(`[Upload] Ingestion pipeline failed for ${document.id}:`, err)
-      })
+      (async () => {
+        await trackDocumentUpload({ userId: user.id, subscription })
+        await runIngestionPipeline(document.id).catch((err) => {
+          console.error(`[Upload] Ingestion pipeline failed for ${document.id}:`, err)
+        })
+      })()
     )
 
     return NextResponse.json({
