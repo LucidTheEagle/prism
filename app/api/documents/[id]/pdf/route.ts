@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
+import { logAudit } from '@/lib/billing/logAudit'
 
 /**
  * GET /api/documents/[id]/pdf
@@ -19,6 +20,7 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  const startTime = Date.now()
   try {
     const { id } = await context.params
 
@@ -93,6 +95,19 @@ export async function GET(
 
     // ── Step 6: Stream to client ──────────────────────────────────────────────
     const pdfBuffer = await pdfResponse.arrayBuffer()
+
+    // Audit log — record every PDF stream event
+    logAudit({
+      userId: user.id,
+      documentId: id,
+      eventType: 'pdf_stream',
+      durationMs: Date.now() - startTime,
+      metadata: {
+        filename,
+        document_name: document.name,
+      },
+      request,
+    }).catch(() => null)
 
     return new NextResponse(pdfBuffer, {
       status: 200,

@@ -7,6 +7,7 @@ import { generateMultiPassAnswer } from '@/lib/ai/answer-generation'
 import { getSubscription } from '@/lib/billing/getSubscription'
 import { checkQueryAccess } from '@/lib/billing/checkAccess'
 import { trackQuery } from '@/lib/billing/trackUsage'
+import { logAudit } from '@/lib/billing/logAudit'
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`\n${'='.repeat(80)}`)
-    console.log(`💬 CHAT REQUEST`)
+
     console.log(`User: ${user.id} | Tier: ${subscription.tier}`)
     console.log(`Query: "${query}"`)
     console.log(`Document ID: ${documentId || 'all user documents'}`)
@@ -167,6 +168,24 @@ export async function POST(request: NextRequest) {
       tokensOutput: multiPassResult.tokens_output,
     }).catch((err) => console.error('[Chat] Usage tracking failed:', err))
 
+    // ── 9b. Audit log ─────────────────────────────────────────────
+    logAudit({
+      userId: user.id,
+      documentId: documentId ?? null,
+      eventType: 'document_query',
+      queryText: query,
+      responseConfidence: multiPassResult.final_answer.confidence_score,
+      chunksAccessed: searchResults.length,
+      durationMs: Date.now() - startTime,
+      metadata: {
+        query_type: analysis.query_type,
+        tier: subscription.tier,
+        was_revised: multiPassResult.was_revised,
+        sources_used: multiPassResult.final_answer.sources_used,
+      },
+      request,
+    }).catch(() => null)
+
     // ── 10. Persist chat message ──────────────────────────────────
     const { error: msgError } = await supabaseAdmin
       .from('chat_messages')
@@ -197,9 +216,6 @@ export async function POST(request: NextRequest) {
     const totalDuration = Date.now() - startTime
     const totalCost = rerankingResult.cost_estimate + multiPassResult.cost_estimate
 
-    console.log(`\n✅ Chat complete in ${(totalDuration / 1000).toFixed(2)}s — $${totalCost.toFixed(6)}`)
-    console.log(`${'='.repeat(80)}\n`)
-
     return NextResponse.json({
       success: true,
       query,
@@ -220,7 +236,6 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const duration = Date.now() - startTime
     const message = error instanceof Error ? error.message : 'Unknown error'
-    console.error(`\n❌ Chat failed after ${(duration / 1000).toFixed(2)}s: ${message}\n`)
     return NextResponse.json(
       { success: false, error: message, duration_ms: duration },
       { status: 500 }
