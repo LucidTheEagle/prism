@@ -1,23 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase/server'
+import { supabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
 
 /**
  * GET /api/documents/[id]/pdf
  *
  * Serves the PDF file for a given document ID.
  *
- * WHY THIS ENDPOINT EXISTS:
- * The Supabase storage bucket is private. Direct public URLs return 400.
- * The upload route stores a `file_url` using getPublicUrl() — that URL
- * is broken for private buckets. Instead, we:
- *   1. Fetch the document record to get file_url
- *   2. Extract the storage filename from file_url
- *   3. Generate a fresh signed URL (60s expiry) via supabaseAdmin
- *   4. Fetch the PDF bytes server-side using the signed URL
- *   5. Stream the bytes back to the client as application/pdf
+ * SECURITY MODEL (v1.1):
+ * 1. Authenticate the requesting user via session cookie
+ * 2. Verify the document belongs to that user (ownership check)
+ * 3. Only then generate a signed URL and stream the bytes
  *
- * This keeps the private bucket private — the signed URL never reaches
- * the browser. The browser only sees our API route.
+ * supabaseAdmin is used ONLY for signed URL generation and byte fetch —
+ * both operations that happen after ownership is confirmed.
+ * The ownership query uses the session-scoped client so RLS fires.
  */
 export async function GET(
   request: NextRequest,
@@ -33,24 +29,36 @@ export async function GET(
       )
     }
 
-    // Step 1: Fetch the document record
-    const { data: document, error: docError } = await supabaseAdmin
+    // ── Step 1: Authenticate ─────────────────────────────────────────────────
+    const supabase = await createSupabaseServerClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    // ── Step 2: Ownership check (RLS-scoped client) ──────────────────────────
+    // This query will return null if the document exists but belongs to
+    // a different user — RLS on documents enforces this silently.
+    const { data: document, error: docError } = await supabase
       .from('documents')
       .select('file_url, name')
       .eq('id', id)
       .single()
 
     if (docError || !document) {
+      // Return 404 regardless of whether the doc doesn't exist or belongs
+      // to another user — never leak existence of another tenant's document
       return NextResponse.json(
         { error: 'Document not found' },
         { status: 404 }
       )
     }
 
-    // Step 2: Extract the storage filename from the stored file_url.
-    // The file_url looks like:
-    // https://<project>.supabase.co/storage/v1/object/public/document-uploads/1708123456789_Contract.pdf
-    // We need just the last segment: "1708123456789_Contract.pdf"
+    // ── Step 3: Extract storage filename ─────────────────────────────────────
     const filename = document.file_url.split('/').pop()
 
     if (!filename) {
@@ -60,8 +68,7 @@ export async function GET(
       )
     }
 
-    // Step 3: Generate a short-lived signed URL (60 seconds is enough —
-    // we immediately fetch from it server-side in the next step)
+    // ── Step 4: Generate signed URL (admin — ownership already verified) ─────
     const { data: signedData, error: signedError } = await supabaseAdmin
       .storage
       .from('document-uploads')
@@ -74,7 +81,7 @@ export async function GET(
       )
     }
 
-    // Step 4: Fetch the PDF bytes using the signed URL
+    // ── Step 5: Fetch PDF bytes server-side ───────────────────────────────────
     const pdfResponse = await fetch(signedData.signedUrl)
 
     if (!pdfResponse.ok) {
@@ -84,7 +91,7 @@ export async function GET(
       )
     }
 
-    // Step 5: Stream the bytes back to the client
+    // ── Step 6: Stream to client ──────────────────────────────────────────────
     const pdfBuffer = await pdfResponse.arrayBuffer()
 
     return new NextResponse(pdfBuffer, {
@@ -92,7 +99,6 @@ export async function GET(
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="${document.name}"`,
-        // Cache for 5 minutes on the client — the PDF content doesn't change
         'Cache-Control': 'private, max-age=300',
       },
     })
