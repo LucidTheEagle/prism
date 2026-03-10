@@ -94,14 +94,15 @@ function UserMenu({ user }: { user: SupabaseUser }) {
             <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{user.email}</p>
           </div>
 
-          <button
+          <Link
+            href="/"
             role="menuitem"
             onClick={() => setOpen(false)}
             className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:bg-slate-50 dark:focus-visible:bg-slate-800 min-h-[44px]"
           >
             <User className="w-4 h-4" aria-hidden="true" />
             Profile
-          </button>
+          </Link>
 
           <Link
             href="/billing"
@@ -184,13 +185,6 @@ export default function ConditionalShell({ children }: { children: React.ReactNo
   // ── EVERYTHING ELSE: full header + footer chrome ──────────────────────────
   return (
     <>
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-emerald-600 focus:text-white focus:text-sm focus:font-medium focus:shadow-lg"
-      >
-        Skip to main content
-      </a>
-
       <header
         className="h-16 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 sticky top-0 z-50 shadow-sm"
         aria-label="PRISM site header"
