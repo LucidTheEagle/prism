@@ -3,34 +3,20 @@ import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { SubscriptionTier } from '@/lib/types'
 
-// ============================================================================
-// STRIPE WEBHOOK PIPELINE
-// POST /api/webhooks/stripe
-//
-// This is the nervous system of PRISM's monetization engine.
-// Stripe calls this endpoint when subscription state changes.
-// We write the result to the subscriptions table so the paywall
-// middleware never has to query Stripe at runtime.
-//
-// Events handled:
-//   checkout.session.completed       → create subscription record
-//   customer.subscription.updated   → sync status + tier
-//   customer.subscription.deleted   → revoke access immediately
-//
-// Security: Stripe-Signature header verified on every request.
-// Raw body required — do NOT parse as JSON before verification.
-// ============================================================================
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-02-25.clover',
-})
-
 function unixToIso(seconds: number | null | undefined): string | null {
   if (!seconds) return null
   return new Date(seconds * 1000).toISOString()
 }
 
+function resolveTier(priceId: string | null | undefined): SubscriptionTier {
+  if (!priceId) return 'free'
+  if (priceId === process.env.STRIPE_PRICE_PRO) return 'pro'
+  if (priceId === process.env.STRIPE_PRICE_ENTERPRISE) return 'enterprise'
+  return 'free'
+}
+
 async function resolveSubscriptionPeriod(
+  stripe: Stripe,
   subscription: Stripe.Subscription
 ): Promise<{ current_period_start: string | null; current_period_end: string | null }> {
   const latestInvoiceId =
@@ -52,16 +38,11 @@ async function resolveSubscriptionPeriod(
   }
 }
 
-// Map Stripe price IDs to internal tiers
-function resolveTier(priceId: string | null | undefined): SubscriptionTier {
-  if (!priceId) return 'free'
-  if (priceId === process.env.STRIPE_PRICE_PRO) return 'pro'
-  if (priceId === process.env.STRIPE_PRICE_ENTERPRISE) return 'enterprise'
-  return 'free'
-}
-
 export async function POST(request: NextRequest) {
-  // ── Step 1: Extract raw body + signature ──────────────────────────────────
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: '2026-02-25.clover',
+  })
+
   const rawBody = await request.text()
   const signature = request.headers.get('stripe-signature')
 
@@ -72,7 +53,6 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // ── Step 2: Verify webhook signature ─────────────────────────────────────
   let event: Stripe.Event
 
   try {
@@ -92,15 +72,14 @@ export async function POST(request: NextRequest) {
 
   console.log(`[Stripe Webhook] Received event: ${event.type} | id: ${event.id}`)
 
-  // ── Step 3: Route to handler ──────────────────────────────────────────────
   try {
     switch (event.type) {
       case 'checkout.session.completed':
-        await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session)
+        await handleCheckoutSessionCompleted(stripe, event.data.object as Stripe.Checkout.Session)
         break
 
       case 'customer.subscription.updated':
-        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription)
+        await handleSubscriptionUpdated(stripe, event.data.object as Stripe.Subscription)
         break
 
       case 'customer.subscription.deleted':
@@ -108,7 +87,6 @@ export async function POST(request: NextRequest) {
         break
 
       default:
-        // Acknowledge unhandled events — never return non-2xx for unknown types
         console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`)
     }
 
@@ -117,7 +95,6 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Handler error'
     console.error(`[Stripe Webhook] Handler error for ${event.type}:`, message)
-    // Return 500 so Stripe retries the event
     return NextResponse.json(
       { error: 'Webhook handler failed' },
       { status: 500 }
@@ -125,19 +102,8 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ============================================================================
-// HANDLER: checkout.session.completed
-//
-// Fired when a user completes the Stripe Checkout flow.
-// The session contains customer_id and subscription_id.
-// We retrieve the full subscription object to get price and period data,
-// then upsert into our subscriptions table.
-//
-// The user_id is passed as metadata.userId when creating the
-// checkout session (Sprint 7). It is the source of truth for
-// linking Stripe state to our auth.users record.
-// ============================================================================
 async function handleCheckoutSessionCompleted(
+  stripe: Stripe,
   session: Stripe.Checkout.Session
 ) {
   const userId = session.metadata?.userId
@@ -153,19 +119,15 @@ async function handleCheckoutSessionCompleted(
   const subscriptionId = session.subscription as string
 
   if (!subscriptionId) {
-    // One-time payment, not a subscription — ignore
     console.log('[Stripe Webhook] checkout.session.completed: no subscription, skipping')
     return
   }
 
-  // Retrieve full subscription from Stripe to get price + period data
-  const subscription = (await stripe.subscriptions.retrieve(
-    subscriptionId
-  )) as Stripe.Subscription
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId) as Stripe.Subscription
   const priceId = subscription.items.data[0]?.price.id ?? null
   const tier = resolveTier(priceId)
   const { current_period_start, current_period_end } =
-    await resolveSubscriptionPeriod(subscription)
+    await resolveSubscriptionPeriod(stripe, subscription)
 
   const { error } = await supabaseAdmin
     .from('subscriptions')
@@ -190,7 +152,6 @@ async function handleCheckoutSessionCompleted(
     throw error
   }
 
-  // Write audit record
   await supabaseAdmin.from('audit_log').insert({
     user_id: userId,
     event_type: 'subscription_change',
@@ -205,23 +166,15 @@ async function handleCheckoutSessionCompleted(
   console.log(`[Stripe Webhook] Subscription created: user=${userId} tier=${tier} status=${subscription.status}`)
 }
 
-// ============================================================================
-// HANDLER: customer.subscription.updated
-//
-// Fired when plan changes, payment fails (→ past_due),
-// cancellation is scheduled, or trial ends.
-// We sync status, price_id, tier, and period dates.
-// Identified by stripe_subscription_id — no metadata needed.
-// ============================================================================
 async function handleSubscriptionUpdated(
+  stripe: Stripe,
   subscription: Stripe.Subscription
 ) {
   const priceId = subscription.items.data[0]?.price.id ?? null
   const tier = resolveTier(priceId)
   const { current_period_start, current_period_end } =
-    await resolveSubscriptionPeriod(subscription)
+    await resolveSubscriptionPeriod(stripe, subscription)
 
-  // Look up our user by stripe_subscription_id
   const { data: existing, error: lookupError } = await supabaseAdmin
     .from('subscriptions')
     .select('user_id')
@@ -266,13 +219,6 @@ async function handleSubscriptionUpdated(
   console.log(`[Stripe Webhook] Subscription updated: user=${existing.user_id} tier=${tier} status=${subscription.status}`)
 }
 
-// ============================================================================
-// HANDLER: customer.subscription.deleted
-//
-// Fired when a subscription is fully canceled (not just scheduled).
-// Access is revoked immediately — status set to 'canceled', tier to 'free'.
-// This is the hard wall. No grace period at the application layer.
-// ============================================================================
 async function handleSubscriptionDeleted(
   subscription: Stripe.Subscription
 ) {

@@ -3,19 +3,11 @@ import Stripe from 'stripe'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { getSubscription } from '@/lib/billing/getSubscription'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-02-25.clover',
-})
-
-/**
- * POST /api/billing/create-checkout
- *
- * Creates a Stripe Checkout session for the authenticated user.
- * Returns the session URL — client redirects to it.
- *
- * Body: { priceId: string }
- */
 export async function POST(request: NextRequest) {
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: '2026-02-25.clover',
+  })
+
   try {
     const supabase = await createSupabaseServerClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -36,8 +28,6 @@ export async function POST(request: NextRequest) {
 
     const subscription = await getSubscription(user.id)
 
-    // If user already has a Stripe customer ID, reuse it
-    // so their payment methods and history are preserved
     let customerId = subscription.stripe_customer_id ?? undefined
 
     if (!customerId) {

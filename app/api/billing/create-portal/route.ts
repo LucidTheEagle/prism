@@ -3,18 +3,11 @@ import Stripe from 'stripe'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { getSubscription } from '@/lib/billing/getSubscription'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-02-25.clover',
-})
-
-/**
- * POST /api/billing/create-portal
- *
- * Creates a Stripe Customer Portal session for the authenticated user.
- * Allows them to manage, upgrade, downgrade, or cancel their subscription.
- * Returns the portal URL — client redirects to it.
- */
 export async function POST(request: NextRequest) {
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: '2026-02-25.clover',
+  })
+
   try {
     const supabase = await createSupabaseServerClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
