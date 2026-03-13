@@ -33,7 +33,7 @@ export function CitationCard({ citation, index, onCitationClick }: CitationCardP
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       aria-label={`Citation ${index + 1}: Jump to page ${citation.page} in PDF viewer`}
-      className="text-xs bg-slate-50 dark:bg-slate-900 rounded-lg p-3 border border-slate-200 dark:border-slate-700 hover:border-emerald-400 dark:hover:border-emerald-500 hover:shadow-sm transition-all cursor-pointer group focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+      className="text-xs bg-slate-50 dark:bg-slate-900 rounded-lg p-3 border border-slate-200 dark:border-slate-700 hover:border-emerald-400 dark:hover:border-emerald-500 hover:shadow-sm transition-all cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
     >
       <div className="flex items-start gap-2">
         <span

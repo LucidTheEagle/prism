@@ -60,7 +60,6 @@ export function ChatMessages({
     >
       <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
 
-        {/* History loading */}
         {historyLoading && (
           <div
             className="flex items-center justify-center py-12"
@@ -75,7 +74,6 @@ export function ChatMessages({
           </div>
         )}
 
-        {/* History error */}
         {!historyLoading && historyError && (
           <div
             className="flex flex-col items-center justify-center py-12 text-center"
@@ -94,7 +92,7 @@ export function ChatMessages({
             <button
               onClick={onHistoryRetry}
               aria-label="Retry loading conversation history"
-              className="inline-flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 hover:underline focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded px-1"
+              className="inline-flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded px-1"
             >
               <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
               Retry
@@ -102,7 +100,6 @@ export function ChatMessages({
           </div>
         )}
 
-        {/* Empty state */}
         {!historyLoading && !historyError && messages.length === 0 && (
           <section aria-label="Getting started suggestions" className="text-center py-8 sm:py-12">
             <div
@@ -126,7 +123,7 @@ export function ChatMessages({
                   <button
                     onClick={() => onSuggestedQuestion(q)}
                     aria-label={`Ask: ${q}`}
-                    className="w-full text-left p-3 sm:p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-600 hover:shadow-md transition-all group focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 min-h-[44px]"
+                    className="w-full text-left p-3 sm:p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-600 hover:shadow-md transition-all group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-h-[44px]"
                   >
                     <p className="text-sm font-medium text-slate-900 dark:text-slate-100 group-hover:text-emerald-700 dark:group-hover:text-emerald-400">
                       {q}
@@ -139,7 +136,6 @@ export function ChatMessages({
           </section>
         )}
 
-        {/* Message list */}
         {!historyLoading && !historyError && (
           <div className="space-y-4 sm:space-y-6">
             {messages.map((message) => (
@@ -155,7 +151,6 @@ export function ChatMessages({
                       : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-2xl rounded-bl-md shadow-sm border border-slate-200 dark:border-slate-700'
                   } px-4 sm:px-5 py-3 sm:py-4`}
                 >
-                  {/* Message content */}
                   {message.role === 'assistant' ? (
                     <div className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base text-slate-900 dark:text-slate-100">
                       {message.content}
@@ -164,7 +159,6 @@ export function ChatMessages({
                     <p className="m-0 text-sm sm:text-base">{message.content}</p>
                   )}
 
-                  {/* Citations */}
                   {message.citations && message.citations.length > 0 && (
                     <section
                       className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-600"
@@ -187,7 +181,6 @@ export function ChatMessages({
                     </section>
                   )}
 
-                  {/* Confidence score */}
                   {message.confidence !== undefined && (
                     <div
                       className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-600 flex items-center gap-2"
@@ -207,7 +200,6 @@ export function ChatMessages({
                     </div>
                   )}
 
-                  {/* Timestamp */}
                   <time
                     dateTime={message.timestamp.toISOString()}
                     className="block mt-2 text-xs opacity-60"
@@ -219,7 +211,6 @@ export function ChatMessages({
               </article>
             ))}
 
-            {/* AI thinking indicator */}
             {isLoading && (
               <div
                 className="flex justify-start"

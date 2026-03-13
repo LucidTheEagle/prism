@@ -19,9 +19,6 @@ import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import type { User } from '@supabase/supabase-js'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// How It Works Section
-// ─────────────────────────────────────────────────────────────────────────────
 function HowItWorksSection() {
   const steps = [
     {
@@ -65,8 +62,6 @@ function HowItWorksSection() {
       className="w-full bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 scroll-mt-16"
     >
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12 sm:py-16 md:py-20">
-
-        {/* Section header */}
         <div className="text-center mb-10 sm:mb-16">
           <div
             className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-full text-xs sm:text-sm text-emerald-700 dark:text-emerald-400 mb-4 sm:mb-6"
@@ -87,14 +82,12 @@ function HowItWorksSection() {
           </p>
         </div>
 
-        {/* Steps — ordered list for screen reader sequence */}
         <ol className="space-y-6 sm:space-y-8" aria-label="PRISM pipeline steps">
           {steps.map((item, i) => (
             <li
               key={i}
               className="relative flex gap-4 sm:gap-6 md:gap-10 items-start group"
             >
-              {/* Step icon + connector */}
               <div className="flex flex-col items-center shrink-0" aria-hidden="true">
                 <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center group-hover:border-emerald-400 transition-colors shadow-sm">
                   {item.icon}
@@ -104,7 +97,6 @@ function HowItWorksSection() {
                 )}
               </div>
 
-              {/* Content */}
               <div className="pb-6 sm:pb-8 flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2">
                   <span className="text-xs font-mono text-slate-400 dark:text-slate-500" aria-hidden="true">
@@ -125,11 +117,10 @@ function HowItWorksSection() {
           ))}
         </ol>
 
-        {/* CTA */}
         <div className="mt-10 sm:mt-16 text-center">
           <a
             href="#upload"
-            className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+            className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
           >
             Try it now — upload a PDF
             <ArrowRight className="w-4 h-4" aria-hidden="true" />
@@ -140,9 +131,6 @@ function HowItWorksSection() {
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Auth Gate Banner
-// ─────────────────────────────────────────────────────────────────────────────
 function AuthGateBanner() {
   return (
     <div className="w-full max-w-2xl mx-auto mt-4" role="region" aria-label="Sign in required">
@@ -160,14 +148,14 @@ function AuthGateBanner() {
         <div className="flex items-center justify-center gap-3 flex-wrap">
           <Link
             href="/register"
-            className="inline-flex items-center gap-2 px-5 sm:px-6 py-2.5 bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-lg text-sm font-semibold transition-all shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+            className="inline-flex items-center gap-2 px-5 sm:px-6 py-2.5 bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-lg text-sm font-semibold transition-all shadow-md hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
           >
             Get Started Free
             <ArrowRight className="w-4 h-4" aria-hidden="true" />
           </Link>
           <Link
             href="/login"
-            className="inline-flex items-center px-5 sm:px-6 py-2.5 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
+            className="inline-flex items-center px-5 sm:px-6 py-2.5 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
           >
             Sign In
           </Link>
@@ -177,9 +165,6 @@ function AuthGateBanner() {
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Home Page
-// ─────────────────────────────────────────────────────────────────────────────
 export default function Home() {
   const router = useRouter()
   const [documentId, setDocumentId] = useState<string | null>(null)
@@ -195,9 +180,7 @@ export default function Home() {
       setAuthLoaded(true)
     })
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
     })
 
@@ -218,7 +201,7 @@ export default function Home() {
     }
   }
 
-  // ── Processing / Ready state ───────────────────────────────────────
+  // ── Processing / Ready state ───────────────────────────────────────────────
   if (documentId) {
     return (
       <main className="min-h-full bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4">
@@ -254,7 +237,6 @@ export default function Home() {
               <p className="text-sm text-slate-700 dark:text-slate-300 mb-2 font-medium">
                 What&apos;s happening:
               </p>
-              {/* ul is appropriate here — these are list items, not steps */}
               <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-1 ml-4 list-disc">
                 <li>Document saved securely to encrypted storage</li>
                 <li>AI analysis and adaptive chunking</li>
@@ -268,7 +250,7 @@ export default function Home() {
               {documentReady && (
                 <button
                   onClick={handleChatClick}
-                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-br from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-lg transition-all shadow-md hover:shadow-lg font-medium text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 min-h-[44px]"
+                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-br from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-lg transition-all shadow-md hover:shadow-lg font-medium text-sm sm:text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 min-h-[44px]"
                   aria-label="Start chatting with your uploaded document"
                 >
                   <MessageSquare className="w-5 h-5" aria-hidden="true" />
@@ -277,7 +259,7 @@ export default function Home() {
               )}
               <button
                 onClick={() => setDocumentId(null)}
-                className="px-6 py-3 text-sm bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 min-h-[44px]"
+                className="px-6 py-3 text-sm bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 min-h-[44px]"
                 aria-label="Discard this document and upload another"
               >
                 Upload Another
@@ -289,24 +271,15 @@ export default function Home() {
     )
   }
 
-  // ── Landing page ───────────────────────────────────────────────────
+  // ── Landing page ───────────────────────────────────────────────────────────
   return (
     <>
-      {/* Skip to main content — first focusable element for keyboard users */}
-      <a
-        href="#upload"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-emerald-600 focus:text-white focus:rounded-lg focus:text-sm focus:font-medium"
-      >
-        Skip to upload
-      </a>
-
       <main
         id="upload"
         className="flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 scroll-mt-16"
       >
         <div className="w-full max-w-4xl px-4 sm:px-6 py-10 sm:py-14 md:py-16">
 
-          {/* Hero */}
           <header className="text-center mb-8 sm:mb-12">
             <div
               className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-full text-xs sm:text-sm text-emerald-700 dark:text-emerald-400 mb-4 sm:mb-6"
@@ -327,10 +300,8 @@ export default function Home() {
             </p>
           </header>
 
-          {/* Upload — gated by auth */}
           <section aria-label="Document upload">
             {!authLoaded ? (
-              // Skeleton — prevents layout shift while auth resolves
               <div
                 className="w-full max-w-2xl mx-auto h-36 sm:h-48 bg-slate-100 dark:bg-slate-800 rounded-2xl animate-pulse"
                 role="status"
@@ -344,7 +315,6 @@ export default function Home() {
             )}
           </section>
 
-          {/* Stats */}
           <section aria-label="PRISM performance stats" className="mt-8 sm:mt-12">
             <dl className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
               {[
@@ -390,7 +360,6 @@ export default function Home() {
             </dl>
           </section>
 
-          {/* Trust indicators */}
           <div className="mt-6 sm:mt-8 text-center" aria-label="Technology highlights">
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
               Trusted by legal teams, compliance officers, and researchers
@@ -411,7 +380,6 @@ export default function Home() {
         </div>
       </main>
 
-      {/* How It Works */}
       <HowItWorksSection />
     </>
   )

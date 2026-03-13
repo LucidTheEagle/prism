@@ -25,7 +25,6 @@ export function ChatInput({
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const isDisabled = isLoading || historyLoading
 
-  // Focus input after history loads
   useEffect(() => {
     if (!historyLoading) inputRef.current?.focus()
   }, [historyLoading])
@@ -43,7 +42,6 @@ export function ChatInput({
       role="region"
       aria-label="Message input"
     >
-      {/* Submit error banner */}
       {submitError && (
         <div
           className="max-w-2xl mx-auto mb-3 flex items-start gap-3 px-3 sm:px-4 py-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-xl"
@@ -55,7 +53,7 @@ export function ChatInput({
           <button
             onClick={onDismissError}
             aria-label="Dismiss error message"
-            className="text-red-400 hover:text-red-600 text-lg leading-none shrink-0 focus:outline-none focus:ring-2 focus:ring-red-400 rounded"
+            className="text-red-400 hover:text-red-600 text-lg leading-none shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
           >
             ×
           </button>
@@ -94,7 +92,7 @@ export function ChatInput({
             disabled={!input.trim() || isDisabled}
             aria-label={isLoading ? 'Sending message…' : 'Send message'}
             aria-busy={isLoading}
-            className="shrink-0 p-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
+            className="shrink-0 p-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
             {isLoading
               ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />

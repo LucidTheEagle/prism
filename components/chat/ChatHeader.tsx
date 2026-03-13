@@ -50,7 +50,6 @@ export function ChatHeader({
   const { theme, setTheme } = useTheme()
   const selectorRef = useRef<HTMLDivElement>(null)
 
-  // Close selector on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (selectorRef.current && !selectorRef.current.contains(e.target as Node)) {
@@ -61,7 +60,6 @@ export function ChatHeader({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [selectorOpen, onSelectorOpen])
 
-  // Close selector on Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && selectorOpen) onSelectorOpen()
@@ -77,17 +75,15 @@ export function ChatHeader({
     >
       <div className="flex items-center justify-between gap-2">
 
-        {/* Left: Back + Logo + Document selector */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
             onClick={() => router.push('/')}
             aria-label="Back to home"
-            className="shrink-0 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-1 min-w-[36px] min-h-[36px] flex items-center justify-center"
+            className="shrink-0 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 min-w-[36px] min-h-[36px] flex items-center justify-center"
           >
             <ArrowLeft className="w-4 h-4 text-slate-600 dark:text-slate-400" aria-hidden="true" />
           </button>
 
-          {/* Logo */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0" aria-label="PRISM">
             <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg" aria-hidden="true">
               <Sparkles className="w-3.5 h-3.5 text-white" aria-hidden="true" />
@@ -97,14 +93,13 @@ export function ChatHeader({
 
           <div className="w-px h-5 bg-slate-300 dark:bg-slate-600 shrink-0" aria-hidden="true" />
 
-          {/* Document selector */}
           <div ref={selectorRef} className="relative min-w-0">
             <button
               onClick={onSelectorOpen}
               aria-haspopup="listbox"
               aria-expanded={selectorOpen}
               aria-label={`Current document: ${activeDocumentName || 'None selected'}. Click to switch document.`}
-              className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors max-w-[140px] sm:max-w-[200px] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+              className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors max-w-[140px] sm:max-w-[200px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
             >
               <FileText className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400 shrink-0" aria-hidden="true" />
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">
@@ -116,7 +111,6 @@ export function ChatHeader({
               />
             </button>
 
-            {/* Dropdown */}
             {selectorOpen && (
               <div
                 role="listbox"
@@ -142,7 +136,7 @@ export function ChatHeader({
                     <p className="text-xs text-red-600 dark:text-red-400">{docsError}</p>
                     <button
                       onClick={onDocsRetry}
-                      className="mt-2 text-xs text-emerald-600 dark:text-emerald-400 hover:underline focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded"
+                      className="mt-2 text-xs text-emerald-600 dark:text-emerald-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
                     >
                       Retry
                     </button>
@@ -166,7 +160,7 @@ export function ChatHeader({
                           <button
                             onClick={() => onDocumentSwitch(doc)}
                             aria-label={`Switch to ${doc.name}${isActive ? ' (currently active)' : ''}`}
-                            className={`w-full text-left px-3 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors border-b border-slate-100 dark:border-slate-700 last:border-0 focus:outline-none focus:bg-slate-50 dark:focus:bg-slate-700 ${
+                            className={`w-full text-left px-3 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors border-b border-slate-100 dark:border-slate-700 last:border-0 focus-visible:outline-none focus-visible:bg-slate-50 dark:focus-visible:bg-slate-700 ${
                               isActive ? 'bg-emerald-50 dark:bg-emerald-900/20' : ''
                             }`}
                           >
@@ -196,7 +190,6 @@ export function ChatHeader({
           </div>
         </div>
 
-        {/* Right: AI Ready + Export + Theme toggle */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <div
             className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg"
@@ -211,7 +204,7 @@ export function ChatHeader({
             <button
               onClick={onExport}
               aria-label="Export conversation as Markdown file"
-              className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-1 min-w-[36px] min-h-[36px] flex items-center justify-center"
+              className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 min-w-[36px] min-h-[36px] flex items-center justify-center"
             >
               <Download className="w-4 h-4 text-slate-600 dark:text-slate-400" aria-hidden="true" />
             </button>
@@ -221,7 +214,7 @@ export function ChatHeader({
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-1 min-w-[36px] min-h-[36px] flex items-center justify-center"
+              className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 min-w-[36px] min-h-[36px] flex items-center justify-center"
             >
               {theme === 'dark'
                 ? <Sun className="w-4 h-4 text-slate-400" aria-hidden="true" />
