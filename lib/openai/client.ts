@@ -1,18 +1,19 @@
 import OpenAI from 'openai'
 
-if (!process.env.OPENAI_API_KEY) {
-  throw new Error('Missing OPENAI_API_KEY environment variable')
+if (!process.env.AI_API_KEY) {
+  throw new Error('Missing AI_API_KEY environment variable')
 }
 
 export const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.AI_API_KEY,
+  baseURL: process.env.AI_BASE_URL ?? 'https://api.openai.com/v1',
 })
 
 // Model configurations
 export const MODELS = {
   // For reasoning and analysis
   GPT4_TURBO: 'gpt-4-turbo',
-  
+
   // For embeddings (1536 dimensions)
   EMBEDDING: 'text-embedding-3-small',
 } as const
