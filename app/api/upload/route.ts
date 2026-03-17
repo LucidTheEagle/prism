@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createHash } from 'crypto'
 import { supabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
 import { runIngestionPipeline } from '@/lib/ai/ingestion-pipeline'
 import { waitUntil } from '@vercel/functions'
@@ -67,13 +68,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ── 4. Upload to Supabase Storage ─────────────────────────────
+    // ── 4. Read buffer + generate SHA-256 hash ────────────────────
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+    const fileHash = createHash('sha256').update(buffer).digest('hex')
+
+    console.log(`[Upload] SHA-256: ${fileHash}`)
+
+    // ── 5. Duplicate detection ────────────────────────────────────
+    // Check if this user has already uploaded this exact file.
+    // Match on both user_id and file_hash — same file from different
+    // users is not a duplicate.
+    const { data: existing } = await supabaseAdmin
+      .from('documents')
+      .select('id, name, status')
+      .eq('user_id', user.id)
+      .eq('file_hash', fileHash)
+      .neq('status', 'failed')
+      .single()
+
+    if (existing) {
+      console.log(`[Upload] Duplicate detected — routing to existing document: ${existing.id}`)
+      return NextResponse.json({
+        success: true,
+        documentId: existing.id,
+        duplicate: true,
+        message: 'This document has already been uploaded. Routing to existing analysis.',
+      })
+    }
+
+    // ── 6. Upload to Supabase Storage ─────────────────────────────
     const timestamp = Date.now()
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
     const filename = `${user.id}_${timestamp}_${sanitizedName}`
-
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from('document-uploads')
@@ -89,7 +116,7 @@ export async function POST(request: NextRequest) {
 
     const fileUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/document-uploads/${filename}`
 
-    // ── 5. Create document record ─────────────────────────────────
+    // ── 7. Create document record with file_hash ──────────────────
     const { data: document, error: dbError } = await supabaseAdmin
       .from('documents')
       .insert({
@@ -98,6 +125,7 @@ export async function POST(request: NextRequest) {
         file_size_bytes: file.size,
         status: 'processing',
         user_id: user.id,
+        file_hash: fileHash,
       })
       .select()
       .single()
@@ -110,7 +138,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Upload] Document created: ${document.id} for user: ${user.id}`)
 
-    // ── 6. Track usage + trigger ingestion ────────────────────────
+    // ── 8. Track usage + trigger ingestion ────────────────────────
     waitUntil(
       (async () => {
         await trackDocumentUpload({ userId: user.id, subscription })
@@ -126,6 +154,7 @@ export async function POST(request: NextRequest) {
       fileUrl,
       message: 'Upload successful! AI processing started.',
     })
+
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Upload failed'
     console.error('[Upload] Fatal error:', message)
