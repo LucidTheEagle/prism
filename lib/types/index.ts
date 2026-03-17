@@ -117,6 +117,9 @@ export interface SearchResponse {
     search_time_ms: number
     vector_weight_used: number
     bm25_weight_used: number
+    avg_combined_score?: number
+    unique_pages?: number
+    results_with_summaries?: number
   }
 }
 

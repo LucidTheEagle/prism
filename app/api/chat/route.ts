@@ -80,8 +80,8 @@ export async function POST(request: NextRequest) {
 
       if (document.user_id !== user.id) {
         return NextResponse.json(
-          { error: 'Forbidden. You do not have access to this document.' },
-          { status: 403 }
+          { error: 'Document not found' },
+          { status: 404 }
         )
       }
 

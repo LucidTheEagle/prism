@@ -1,31 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase/server'
-import { 
-  analyzeQuery, 
+import { createSupabaseServerClient, supabaseAdmin } from '@/lib/supabase/server'
+import {
+  analyzeQuery,
   formatAnalysisForLogging,
   getQueryComplexity,
-  estimateQueryTime 
+  estimateQueryTime,
 } from '@/lib/ai/query-analysis'
 
-/**
- * POST /api/analyze-query
- * 
- * Analyzes a user query to determine optimal search strategy
- * 
- * Request body:
- * {
- *   "query": "What is the termination clause?",
- *   "documentId": "uuid" (optional - provides document context)
- * }
- */
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
   try {
+    // ── 1. Authenticate ───────────────────────────────────────────
+    const supabase = await createSupabaseServerClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Please sign in.' },
+        { status: 401 }
+      )
+    }
+
+    // ── 2. Parse and validate request body ────────────────────────
     const body = await request.json()
     const { query, documentId } = body
 
-    // Validate query
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
       return NextResponse.json(
         { error: 'Query is required and must be a non-empty string' },
@@ -35,42 +35,52 @@ export async function POST(request: NextRequest) {
 
     console.log(`\n${'='.repeat(80)}`)
     console.log(`🔍 QUERY ANALYSIS`)
+    console.log(`User: ${user.id}`)
     console.log(`Query: "${query}"`)
-    console.log(`Document ID: ${documentId || 'none (global search)'}`)
+    console.log(`Document ID: ${documentId || 'none'}`)
     console.log(`${'='.repeat(80)}\n`)
 
-    // Get document context if documentId provided
+    // ── 3. Document ownership check ───────────────────────────────
     let documentContext
     if (documentId) {
       const { data: document, error } = await supabaseAdmin
         .from('documents')
-        .select('document_type, complexity_score, key_entities')
+        .select('document_type, complexity_score, key_entities, user_id')
         .eq('id', documentId)
         .single()
 
-      if (!error && document) {
-        documentContext = {
-          document_type: document.document_type || undefined,
-          complexity_score: document.complexity_score || undefined,
-          key_entities: document.key_entities || undefined,
-        }
-        console.log(`[Context] Document type: ${documentContext.document_type}`)
-        console.log(`[Context] Complexity: ${documentContext.complexity_score}/10`)
+      if (error || !document) {
+        return NextResponse.json(
+          { error: 'Document not found' },
+          { status: 404 }
+        )
       }
+
+      // Ownership check — 404 not 403
+      if (document.user_id !== user.id) {
+        return NextResponse.json(
+          { error: 'Document not found' },
+          { status: 404 }
+        )
+      }
+
+      documentContext = {
+        document_type: document.document_type || undefined,
+        complexity_score: document.complexity_score || undefined,
+        key_entities: document.key_entities || undefined,
+      }
+
+      console.log(`[Context] Document type: ${documentContext.document_type}`)
     }
 
-    // Analyze query
+    // ── 4. Analyze query ──────────────────────────────────────────
     const analysis = await analyzeQuery(query, documentContext)
-
-    // Calculate metrics
     const complexity = getQueryComplexity(analysis)
     const timeEstimate = estimateQueryTime(analysis)
 
-    // Log analysis
     console.log(formatAnalysisForLogging(analysis))
 
     const duration = Date.now() - startTime
-
     console.log(`\n✅ Analysis complete in ${duration}ms\n`)
 
     return NextResponse.json({
@@ -89,16 +99,8 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const duration = Date.now() - startTime
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-
-    console.error(`\n❌ Query analysis failed:`, errorMessage)
-    console.error(`Duration: ${duration}ms\n`)
-
     return NextResponse.json(
-      { 
-        success: false,
-        error: errorMessage,
-        duration_ms: duration,
-      },
+      { success: false, error: errorMessage, duration_ms: duration },
       { status: 500 }
     )
   }
