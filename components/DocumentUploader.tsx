@@ -14,7 +14,6 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
-  // Unique IDs for ARIA associations — safe with SSR
   const inputId = useId()
   const errorId = useId()
   const progressId = useId()
@@ -93,12 +92,10 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) handleUpload(file)
-    // Reset input so the same file can be re-selected after an error
     e.target.value = ''
   }, [handleUpload])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    // Keyboard users activate the drop zone with Enter or Space
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
       if (!isUploading) document.getElementById(inputId)?.click()
@@ -111,18 +108,6 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
 
   return (
     <div className="w-full max-w-2xl mx-auto">
-
-      {/*
-       * Drop zone
-       *
-       * Previously a <div onClick> — not keyboard accessible and not
-       * announced by screen readers as interactive.
-       *
-       * Now: role="button" + tabIndex + onKeyDown for Enter/Space.
-       * aria-label describes the full action including constraints.
-       * aria-disabled prevents interaction announcements while uploading.
-       * aria-describedby links to the error message when one exists.
-       */}
       <div
         role="button"
         tabIndex={isUploading ? -1 : 0}
@@ -137,7 +122,6 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
         onKeyDown={handleKeyDown}
         className={cn(
           'border-2 border-dashed rounded-xl text-center transition-all shadow-sm',
-          // Mobile: less padding. Desktop: generous padding.
           'p-8 sm:p-12 md:p-16',
           isDragging
             ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 shadow-md scale-[1.02]'
@@ -145,12 +129,10 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
           isUploading
             ? 'pointer-events-none opacity-60 cursor-not-allowed'
             : 'cursor-pointer',
-          // Visible focus ring for keyboard users
           'focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2'
         )}
       >
         {isUploading ? (
-          // ── Uploading state ────────────────────────────────────────
           <div className="space-y-3 sm:space-y-4">
             <Loader2
               className="w-12 h-12 sm:w-16 sm:h-16 text-emerald-500 mx-auto animate-spin"
@@ -160,12 +142,6 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
               <p className="text-base sm:text-lg font-medium text-slate-700 dark:text-slate-300">
                 Uploading…
               </p>
-
-              {/*
-               * Progress bar
-               * role="progressbar" with aria-valuenow/min/max tells
-               * screen readers the exact upload percentage.
-               */}
               <div
                 role="progressbar"
                 aria-valuenow={uploadProgress}
@@ -181,7 +157,6 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
                   aria-hidden="true"
                 />
               </div>
-
               <p
                 className="text-xs text-slate-500 dark:text-slate-400 mt-2"
                 aria-live="polite"
@@ -193,7 +168,6 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
           </div>
 
         ) : isDragging ? (
-          // ── Drag-over state ────────────────────────────────────────
           <div className="animate-pulse">
             <Upload
               className="w-12 h-12 sm:w-16 sm:h-16 text-emerald-500 mx-auto mb-3 sm:mb-4"
@@ -205,7 +179,6 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
           </div>
 
         ) : (
-          // ── Default idle state ─────────────────────────────────────
           <>
             <Upload
               className="w-12 h-12 sm:w-16 sm:h-16 text-slate-400 dark:text-slate-500 mx-auto mb-3 sm:mb-4"
@@ -227,17 +200,15 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
         )}
       </div>
 
-      {/*
-       * Hidden file input
-       *
-       * Associated with the drop zone via aria-controls would be ideal
-       * but file inputs can't be reliably labelled that way cross-browser.
-       * The sr-only <label> gives screen readers a proper association.
-       *
-       * The input itself is hidden visually; the drop zone button triggers
-       * it programmatically. This is the standard pattern for custom
-       * file upload UIs.
-       */}
+      {/* Security trust badge */}
+      <div
+        className="mt-3 flex items-center justify-center gap-1.5 text-xs text-slate-400 dark:text-slate-500"
+        aria-label="Security information"
+      >
+        <span aria-hidden="true">🔒</span>
+        <span>AES-256 Encrypted · Isolated to your account · Never used for AI training</span>
+      </div>
+
       <label htmlFor={inputId} className="sr-only">
         Choose a PDF file to upload
       </label>
@@ -252,13 +223,6 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
         tabIndex={-1}
       />
 
-      {/*
-       * Error message
-       *
-       * role="alert" + aria-live="assertive" means screen readers
-       * announce this immediately when it appears — critical for upload
-       * failures where the user needs to know what went wrong.
-       */}
       {error && (
         <div
           id={errorId}
