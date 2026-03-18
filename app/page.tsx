@@ -298,6 +298,10 @@ export default function Home() {
                 forensic citation accuracy
               </strong>
             </p>
+            <p className="mt-3 text-xs sm:text-sm text-slate-500 dark:text-slate-400 flex items-center justify-center gap-1.5">
+              <span aria-hidden="true">🔒</span>
+              AES-256 encrypted · Isolated to your account · Never used to train any AI model
+            </p>
           </header>
 
           <section aria-label="Document upload">
@@ -320,19 +324,19 @@ export default function Home() {
               {[
                 {
                   icon: <Target className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" aria-hidden="true" />,
-                  stat: '95%',
-                  label: 'Average Confidence',
+                  stat: 'High Confidence',
+                  label: 'Answer Quality',
                   sub: 'AI self-validates every answer',
                 },
                 {
                   icon: <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" aria-hidden="true" />,
-                  stat: '<30s',
-                  label: 'Response Time',
-                  sub: 'Complete multi-pass answer',
+                  stat: 'Multi-Pass',
+                  label: 'Reasoning Engine',
+                  sub: 'Three-stage validation pipeline',
                 },
                 {
                   icon: <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" aria-hidden="true" />,
-                  stat: '100%',
+                  stat: 'Every Answer',
                   label: 'Source Verified',
                   sub: 'Click to exact paragraph',
                 },
@@ -362,7 +366,7 @@ export default function Home() {
 
           <div className="mt-6 sm:mt-8 text-center" aria-label="Technology highlights">
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-              Trusted by legal teams, compliance officers, and researchers
+              Built for legal professionals, compliance officers, and researchers
             </p>
             <ul className="flex items-center justify-center gap-3 sm:gap-6 text-xs text-slate-400 dark:text-slate-500 flex-wrap list-none">
               {[

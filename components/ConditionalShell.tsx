@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { LogOut, User, ChevronDown, CreditCard } from 'lucide-react'
+import { LogOut, User, ChevronDown, CreditCard, FileText } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
@@ -103,7 +103,17 @@ function UserMenu({ user }: { user: SupabaseUser }) {
             <User className="w-4 h-4" aria-hidden="true" />
             Profile
           </Link>
-
+          
+          <Link
+            href="/documents"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:bg-slate-50 dark:focus-visible:bg-slate-800 min-h-[44px]"
+          >
+            <FileText className="w-4 h-4" aria-hidden="true" />
+            My Documents
+          </Link>
+          
           <Link
             href="/billing"
             role="menuitem"
@@ -260,10 +270,26 @@ export default function ConditionalShell({ children }: { children: React.ReactNo
 
       <footer
         className="bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 py-3 px-4 text-center text-xs text-slate-500 dark:text-slate-400"
-        aria-label="Legal disclaimer"
+        aria-label="Site footer"
       >
-        <span className="hidden sm:inline">PRISM is a research tool, not legal advice. </span>
-        Always verify critical information.
+        <div className="flex items-center justify-center gap-3 flex-wrap">
+          <span className="hidden sm:inline">PRISM is a research tool, not legal advice. Always verify critical information.</span>
+          <span className="sm:hidden">Always verify critical information.</span>
+          <span aria-hidden="true" className="hidden sm:inline">·</span>
+          <Link
+            href="/security"
+            className="text-emerald-600 dark:text-emerald-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
+          >
+            Security
+          </Link>
+          <span aria-hidden="true">·</span>
+          <Link
+            href="/privacy"
+            className="text-emerald-600 dark:text-emerald-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
+          >
+            Privacy
+          </Link>
+        </div>
       </footer>
     </>
   )
