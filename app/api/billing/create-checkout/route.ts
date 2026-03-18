@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { getSubscription } from '@/lib/billing/getSubscription'
+import { SubscriptionTier } from '@/lib/types'
+
+const TIER_PRICE_MAP: Record<string, string | undefined> = {
+  pro: process.env.STRIPE_PRICE_PRO,
+  enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
+}
 
 export async function POST(request: NextRequest) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -17,17 +23,31 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { priceId } = body
 
-    if (!priceId || typeof priceId !== 'string') {
+    // Accept either tier (new) or priceId (legacy) — tier takes precedence
+    const tier = body.tier as SubscriptionTier | undefined
+    const legacyPriceId = body.priceId as string | undefined
+
+    let priceId: string | undefined
+
+    if (tier) {
+      priceId = TIER_PRICE_MAP[tier]
+      if (!priceId) {
+        return NextResponse.json(
+          { error: `No price configured for tier: ${tier}` },
+          { status: 400 }
+        )
+      }
+    } else if (legacyPriceId) {
+      priceId = legacyPriceId
+    } else {
       return NextResponse.json(
-        { error: 'priceId is required' },
+        { error: 'tier or priceId is required' },
         { status: 400 }
       )
     }
 
     const subscription = await getSubscription(user.id)
-
     let customerId = subscription.stripe_customer_id ?? undefined
 
     if (!customerId) {

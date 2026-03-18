@@ -39,17 +39,17 @@ function StatusBadge({ status }: { status: string }) {
 const TIER_FEATURES: Record<SubscriptionTier, { icon: React.ElementType; label: string; value: string }[]> = {
   free: [
     { icon: FileText, label: 'Documents', value: '3 per period' },
-    { icon: MessageSquare, label: 'Queries', value: '20 per period' },
+    { icon: MessageSquare, label: 'Queries', value: '10 per period' },
     { icon: Zap, label: 'File size', value: '10MB max' },
   ],
   pro: [
-    { icon: FileText, label: 'Documents', value: '25 per period' },
-    { icon: MessageSquare, label: 'Queries', value: 'Unlimited' },
-    { icon: Zap, label: 'File size', value: '50MB max' },
+    { icon: FileText, label: 'Documents', value: '20 per period' },
+    { icon: MessageSquare, label: 'Queries', value: '200 per period' },
+    { icon: Zap, label: 'File size', value: '100MB max' },
     { icon: Shield, label: 'Audit log', value: 'Full access' },
   ],
   enterprise: [
-    { icon: FileText, label: 'Documents', value: 'Unlimited' },
+    { icon: FileText, label: 'Documents', value: '100 per period' },
     { icon: MessageSquare, label: 'Queries', value: 'Unlimited' },
     { icon: Zap, label: 'File size', value: '500MB max' },
     { icon: Shield, label: 'Audit log', value: 'Full access' },
@@ -65,7 +65,6 @@ export default function BillingClient({
 
   const tier = subscription.tier
   const features = TIER_FEATURES[tier]
-  const isActive = subscription.status === 'active' || subscription.status === 'trialing'
   const hasBillingAccount = !!subscription.stripe_customer_id
 
   async function handleUpgrade() {
@@ -75,7 +74,7 @@ export default function BillingClient({
       const response = await fetch('/api/billing/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priceId: PRICE_IDS.pro }),
+        body: JSON.stringify({ tier: 'pro' }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Failed to create checkout session')
@@ -182,7 +181,7 @@ export default function BillingClient({
               disabled={loading !== null}
               className="flex-1 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-sm font-semibold px-4 py-2.5 hover:bg-slate-700 dark:hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading === 'checkout' ? 'Redirecting...' : 'Upgrade to Pro — $199/mo'}
+              {loading === 'checkout' ? 'Redirecting...' : 'Upgrade to Solo Lawyer — $29/mo'}
             </button>
           )}
 
