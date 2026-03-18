@@ -286,9 +286,16 @@ export default function ConditionalShell({ children }: { children: React.ReactNo
           <Link
             href="/privacy"
             className="text-emerald-600 dark:text-emerald-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
-          >
-            Privacy
-          </Link>
+         >
+           Privacy
+         </Link>
+         <span aria-hidden="true">·</span>
+         <Link
+          href="/terms"
+          className="text-emerald-600 dark:text-emerald-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
+        >
+          Terms
+        </Link>
         </div>
       </footer>
     </>

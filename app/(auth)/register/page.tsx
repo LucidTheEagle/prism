@@ -17,6 +17,7 @@ function GoogleIcon() {
 }
 
 export default function RegisterPage() {
+  const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -25,8 +26,8 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
-  // Stable IDs for ARIA associations
   const errorId = useId()
+  const fullNameId = useId()
   const emailId = useId()
   const passwordId = useId()
   const strengthId = useId()
@@ -38,6 +39,11 @@ export default function RegisterPage() {
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+
+    if (!fullName.trim()) {
+      setError('Please enter your full name.')
+      return
+    }
 
     if (!passwordStrong) {
       setError('Password must be at least 8 characters.')
@@ -51,6 +57,10 @@ export default function RegisterPage() {
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
+        data: {
+          full_name: fullName.trim(),
+          name: fullName.trim(),
+        },
       },
     })
 
@@ -81,7 +91,7 @@ export default function RegisterPage() {
     }
   }
 
-  // ── Success state ─────────────────────────────────────────────────────────
+  // ── Success state ─────────────────────────────────────────────────
   if (success) {
     return (
       <main
@@ -113,7 +123,7 @@ export default function RegisterPage() {
             </p>
             <Link
               href="/login"
-              className="text-sm text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded"
+              className="text-sm text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
             >
               Back to sign in
             </Link>
@@ -123,27 +133,18 @@ export default function RegisterPage() {
     )
   }
 
-  // ── Registration form ─────────────────────────────────────────────────────
+  // ── Registration form ─────────────────────────────────────────────
   return (
     <main
       className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 px-4 py-8 sm:py-12"
       aria-label="Create account page"
     >
       <div className="w-full max-w-md">
-
-        {/* PRISM wordmark */}
-        <div className="text-center mb-6 sm:mb-8" aria-hidden="true">
-          <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 tracking-tight">
-            PRISM
-          </span>
-        </div>
-
         <div
           className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-5 sm:p-8 w-full"
           role="region"
           aria-label="Create your PRISM account"
         >
-          {/* Heading */}
           <div className="mb-6 sm:mb-8 text-center">
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-50 mb-1">
               Create your account
@@ -153,11 +154,6 @@ export default function RegisterPage() {
             </p>
           </div>
 
-          {/*
-           * Error banner
-           * role="alert" + aria-live="assertive" — announced immediately
-           * when auth fails without needing focus movement.
-           */}
           {error && (
             <div
               id={errorId}
@@ -170,7 +166,6 @@ export default function RegisterPage() {
             </div>
           )}
 
-          {/* Google OAuth */}
           <button
             onClick={handleGoogleSignIn}
             disabled={isAnyLoading}
@@ -186,7 +181,6 @@ export default function RegisterPage() {
             <span>{googleLoading ? 'Redirecting to Google…' : 'Continue with Google'}</span>
           </button>
 
-          {/* Divider */}
           <div className="relative my-5 sm:my-6" role="separator" aria-label="Or continue with email">
             <div className="absolute inset-0 flex items-center" aria-hidden="true">
               <div className="w-full border-t border-slate-200 dark:border-slate-700" />
@@ -198,11 +192,6 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/*
-           * Registration form
-           * noValidate — defers to our controlled error state.
-           * aria-describedby — links form to error banner when present.
-           */}
           <form
             onSubmit={handleRegister}
             aria-label="Create account with email and password"
@@ -210,7 +199,29 @@ export default function RegisterPage() {
             noValidate
             className="space-y-4"
           >
-            {/* Email */}
+            {/* Full Name */}
+            <div>
+              <label
+                htmlFor={fullNameId}
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+              >
+                Full Name
+              </label>
+              <input
+                id={fullNameId}
+                type="text"
+                autoComplete="name"
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Your full name"
+                aria-required="true"
+                disabled={isAnyLoading}
+                className="w-full px-3.5 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-shadow disabled:opacity-60 disabled:cursor-not-allowed min-h-[44px]"
+              />
+            </div>
+
+            {/* Work Email */}
             <div>
               <label
                 htmlFor={emailId}
@@ -271,14 +282,6 @@ export default function RegisterPage() {
                 </button>
               </div>
 
-              {/*
-               * Password strength indicator
-               * id={strengthId} is referenced by aria-describedby on the
-               * password input — screen readers read this as the input's
-               * description, announcing "Too short" or "Strong" as the
-               * user types without needing to move focus.
-               * aria-live="polite" announces strength changes inline.
-               */}
               <div
                 id={strengthId}
                 aria-live="polite"
@@ -313,7 +316,7 @@ export default function RegisterPage() {
               disabled={isAnyLoading}
               aria-busy={loading}
               aria-label={loading ? 'Creating your account, please wait' : 'Create your PRISM account'}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-lg text-sm font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed mt-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 min-h-[44px]"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-lg text-sm font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed mt-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus:ring-offset-2 min-h-[44px]"
             >
               {loading ? (
                 <>
@@ -331,26 +334,25 @@ export default function RegisterPage() {
             By creating an account you agree to our{' '}
             <Link
               href="/terms"
-              className="underline underline-offset-2 hover:text-slate-700 dark:hover:text-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded"
+              className="underline underline-offset-2 hover:text-slate-700 dark:hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus:ring-emerald-500 rounded"
             >
-              terms of service
+              Terms of Service
             </Link>
             {' '}and{' '}
             <Link
               href="/privacy"
-              className="underline underline-offset-2 hover:text-slate-700 dark:hover:text-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded"
+              className="underline underline-offset-2 hover:text-slate-700 dark:hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
             >
-              privacy policy
+              Privacy Policy
             </Link>
             .
           </p>
 
-          {/* Sign in link */}
           <p className="mt-3 sm:mt-4 text-center text-sm text-slate-500 dark:text-slate-400">
             Already have an account?{' '}
             <Link
               href="/login"
-              className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded"
+              className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
             >
               Sign in
             </Link>

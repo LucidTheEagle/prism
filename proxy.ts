@@ -33,9 +33,9 @@ import { NextResponse, type NextRequest } from 'next/server'
  *   /api/** (except whitelist below)
  */
 
-const PUBLIC_ROUTES = ['/', '/login', '/register']
+const PUBLIC_ROUTES = ['/', '/login', '/register', '/privacy', '/terms', '/security']
 const AUTH_ROUTES = ['/login', '/register']
-const PUBLIC_API_ROUTES = ['/api/test-supabase']
+const PUBLIC_API_ROUTES = ['/api/test-supabase', '/api/keep-alive']
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })

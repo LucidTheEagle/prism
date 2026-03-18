@@ -121,7 +121,7 @@ function LoginForm() {
         aria-label="Continue with Google"
         aria-busy={googleLoading}
         aria-describedby={error ? errorId : undefined}
-        className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 min-h-[44px]"
+        className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 min-h-[44px]"
       >
         {googleLoading
           ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
@@ -190,7 +190,7 @@ function LoginForm() {
             </label>
             <Link
               href="/forgot-password"
-              className="text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded"
+              className="text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
             >
               Forgot password?
             </Link>
@@ -254,7 +254,7 @@ function LoginForm() {
         Don&apos;t have an account?{' '}
         <Link
           href="/register"
-          className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded"
+          className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
         >
           Create one free
         </Link>
@@ -277,13 +277,6 @@ export default function LoginPage() {
       aria-label="Sign in page"
     >
       <div className="w-full max-w-md">
-        {/* PRISM wordmark above card */}
-        <div className="text-center mb-6 sm:mb-8" aria-hidden="true">
-          <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 tracking-tight">
-            PRISM
-          </span>
-        </div>
-
         <Suspense
           fallback={
             <div
