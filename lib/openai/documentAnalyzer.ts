@@ -43,7 +43,7 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT.`
 
   try {
     const response = await openai.chat.completions.create({
-      model: MODELS.GPT4_TURBO,
+      model: MODELS.GPT4O,
       messages: [
         {
           role: 'system',

@@ -1,10 +1,5 @@
-import { openai } from './client'
+import { openaiEmbeddings, MODELS } from './client'
 import { supabaseAdmin } from '@/lib/supabase/server'
-
-/**
- * PRISM Embedding Generation System
- * Generates vector embeddings for document chunks using OpenAI
- */
 
 export interface EmbeddingResult {
   chunk_id: string
@@ -23,15 +18,14 @@ export interface EmbeddingStats {
 
 /**
  * Generate embeddings for a single chunk
- * Used for individual chunk processing or retries
  */
 export async function generateEmbedding(text: string): Promise<{
   embedding: number[]
   tokens: number
 }> {
   try {
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-3-small', // 1536 dimensions
+    const response = await openaiEmbeddings.embeddings.create({
+      model: MODELS.EMBEDDING,
       input: text,
       encoding_format: 'float',
     })
@@ -39,15 +33,11 @@ export async function generateEmbedding(text: string): Promise<{
     const embedding = response.data[0].embedding
     const tokens = response.usage.total_tokens
 
-    // Validate embedding dimensions
     if (embedding.length !== 1536) {
       throw new Error(`Invalid embedding dimension: ${embedding.length} (expected 1536)`)
     }
 
-    return {
-      embedding,
-      tokens,
-    }
+    return { embedding, tokens }
   } catch (error) {
     console.error('[Embeddings] Generation error:', error)
     throw error
@@ -56,7 +46,7 @@ export async function generateEmbedding(text: string): Promise<{
 
 /**
  * Generate embeddings for multiple chunks in batch
- * Processes up to 100 chunks at once (OpenAI batch limit)
+ * Processes up to 100 chunks at once
  */
 export async function generateEmbeddingsBatch(
   texts: string[]
@@ -70,17 +60,16 @@ export async function generateEmbeddingsBatch(
   try {
     console.log(`[Embeddings] Generating batch of ${texts.length} embeddings...`)
 
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
+    const response = await openaiEmbeddings.embeddings.create({
+      model: MODELS.EMBEDDING,
       input: texts,
       encoding_format: 'float',
     })
 
-    // Map results back to chunk IDs
     const results: EmbeddingResult[] = response.data.map((item, index) => ({
-      chunk_id: index.toString(), // Temporary ID, will be replaced
+      chunk_id: index.toString(),
       embedding: item.embedding,
-      tokens_used: Math.ceil(response.usage.total_tokens / texts.length), // Estimate per chunk
+      tokens_used: Math.ceil(response.usage.total_tokens / texts.length),
     }))
 
     console.log(`[Embeddings] Batch complete: ${results.length} embeddings generated`)
@@ -107,7 +96,6 @@ export async function generateDocumentEmbeddings(
   console.log(`[Embeddings] Starting embedding generation for document: ${documentId}`)
 
   try {
-    // 1. Fetch all chunks for this document
     const { data: chunks, error: fetchError } = await supabaseAdmin
       .from('document_chunks')
       .select('id, content')
@@ -120,34 +108,28 @@ export async function generateDocumentEmbeddings(
 
     console.log(`[Embeddings] Found ${chunks.length} chunks to process`)
 
-    // 2. Process in batches of 100
     const BATCH_SIZE = 100
     const batches = []
 
     for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
-      const batch = chunks.slice(i, i + BATCH_SIZE)
-      batches.push(batch)
+      batches.push(chunks.slice(i, i + BATCH_SIZE))
     }
 
     console.log(`[Embeddings] Processing ${batches.length} batch(es)...`)
 
-    // 3. Generate embeddings for each batch
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
       const batch = batches[batchIndex]
       console.log(`[Embeddings] Batch ${batchIndex + 1}/${batches.length}: ${batch.length} chunks`)
 
       try {
-        // Extract text content
         const texts = batch.map((chunk) => chunk.content)
 
-        // Generate embeddings with retry logic
         const embeddings = await retryWithBackoff(
           () => generateEmbeddingsBatch(texts),
-          3, // Max retries
-          1000 // Initial delay (ms)
+          3,
+          1000
         )
 
-        // 4. Store embeddings in database
         for (let i = 0; i < batch.length; i++) {
           const chunk = batch[i]
           const embedding = embeddings[i]
@@ -155,9 +137,7 @@ export async function generateDocumentEmbeddings(
           try {
             const { error: updateError } = await supabaseAdmin
               .from('document_chunks')
-              .update({
-                embedding: embedding.embedding, // PostgreSQL vector type
-              })
+              .update({ embedding: embedding.embedding })
               .eq('id', chunk.id)
 
             if (updateError) {
@@ -178,7 +158,6 @@ export async function generateDocumentEmbeddings(
       }
     }
 
-    // 5. Calculate statistics
     const processingTime = Date.now() - startTime
     const estimatedCost = calculateEmbeddingCost(totalTokens)
 
@@ -201,10 +180,6 @@ export async function generateDocumentEmbeddings(
   }
 }
 
-/**
- * Retry function with exponential backoff
- * Handles rate limiting and temporary API failures
- */
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   maxRetries: number,
@@ -217,9 +192,8 @@ async function retryWithBackoff<T>(
       return await fn()
     } catch (error) {
       lastError = error as Error
-      
       if (attempt < maxRetries) {
-        const delay = initialDelay * Math.pow(2, attempt) // Exponential backoff
+        const delay = initialDelay * Math.pow(2, attempt)
         console.log(`[Embeddings] Retry ${attempt + 1}/${maxRetries} after ${delay}ms...`)
         await sleep(delay)
       }
@@ -229,61 +203,31 @@ async function retryWithBackoff<T>(
   throw new Error(`Failed after ${maxRetries} retries: ${lastError?.message}`)
 }
 
-/**
- * Sleep utility for retry delays
- */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/**
- * Calculate estimated cost for embeddings
- * text-embedding-3-small: $0.00002 per 1K tokens
- */
 export function calculateEmbeddingCost(tokens: number): number {
   const COST_PER_1K_TOKENS = 0.00002
   return (tokens / 1000) * COST_PER_1K_TOKENS
 }
 
-/**
- * Validate embedding vector
- * Ensures correct dimensions and no NaN values
- */
 export function validateEmbedding(embedding: number[]): {
   valid: boolean
   error?: string
 } {
-  // Check dimension
   if (embedding.length !== 1536) {
-    return {
-      valid: false,
-      error: `Invalid dimension: ${embedding.length} (expected 1536)`,
-    }
+    return { valid: false, error: `Invalid dimension: ${embedding.length} (expected 1536)` }
   }
-
-  // Check for NaN or Infinity
   if (embedding.some((val) => !isFinite(val))) {
-    return {
-      valid: false,
-      error: 'Embedding contains NaN or Infinity values',
-    }
+    return { valid: false, error: 'Embedding contains NaN or Infinity values' }
   }
-
-  // Check for all zeros (suspicious)
   if (embedding.every((val) => val === 0)) {
-    return {
-      valid: false,
-      error: 'Embedding is all zeros',
-    }
+    return { valid: false, error: 'Embedding is all zeros' }
   }
-
   return { valid: true }
 }
 
-/**
- * Get embedding statistics for a document
- * Used for monitoring and debugging
- */
 export async function getEmbeddingStats(documentId: string): Promise<{
   total_chunks: number
   chunks_with_embeddings: number
@@ -307,8 +251,8 @@ export async function getEmbeddingStats(documentId: string): Promise<{
     total_chunks: totalChunks,
     chunks_with_embeddings: chunksWithEmbeddings,
     chunks_without_embeddings: chunksWithoutEmbeddings,
-    completion_percentage: totalChunks > 0 
-      ? Math.round((chunksWithEmbeddings / totalChunks) * 100) 
+    completion_percentage: totalChunks > 0
+      ? Math.round((chunksWithEmbeddings / totalChunks) * 100)
       : 0,
   }
 }
