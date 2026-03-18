@@ -417,30 +417,30 @@ created_at: string
 
 // Tier limits — single source of truth
 export const TIER_LIMITS: Record<SubscriptionTier, {
-document_limit: number | null   // null = unlimited
-query_limit: number | null      // null = unlimited
-file_size_limit_mb: number
-label: string
-}> = {
-free: {
-  document_limit: 3,
-  query_limit: 20,
-  file_size_limit_mb: 10,
-  label: 'Free'
-},
-pro: {
-  document_limit: 25,
-  query_limit: null,
-  file_size_limit_mb: 50,
-  label: 'Pro'
-},
-enterprise: {
-  document_limit: null,
-  query_limit: null,
-  file_size_limit_mb: 500,
-  label: 'Enterprise'
-}
-}
+  document_limit: number | null
+  query_limit: number | null
+  file_size_limit_mb: number
+  label: string
+  }> = {
+  free: {
+    document_limit: 3,
+    query_limit: 10,
+    file_size_limit_mb: 10,
+    label: 'Beta Free'
+  },
+  pro: {
+    document_limit: 20,
+    query_limit: 200,
+    file_size_limit_mb: 100,
+    label: 'Solo Lawyer'
+  },
+  enterprise: {
+    document_limit: 100,
+    query_limit: null,
+    file_size_limit_mb: 500,
+    label: 'Small Firm'
+  }
+  }
 
 // Price ID constants — swap mock values for real Stripe price IDs at go-live
 export const PRICE_IDS = {
