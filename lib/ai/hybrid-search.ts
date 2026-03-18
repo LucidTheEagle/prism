@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { openai } from '@/lib/openai/client'
+import { openaiEmbeddings, MODELS } from '@/lib/openai/client'
 import type { SearchResult, QueryAnalysis } from '@/lib/types'
 
 /**
@@ -21,8 +21,8 @@ import type { SearchResult, QueryAnalysis } from '@/lib/types'
 
 export async function generateQueryEmbedding(query: string): Promise<number[]> {
   try {
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
+    const response = await openaiEmbeddings.embeddings.create({
+      model: MODELS.EMBEDDING,
       input: query,
       encoding_format: 'float',
     })

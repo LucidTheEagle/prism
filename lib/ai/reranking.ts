@@ -98,7 +98,7 @@ Return EXACTLY ${resultsToRerank.length} scores in the same order as results.
 RESPOND WITH ONLY THE JSON ARRAY.`
 
     const response = await openai.chat.completions.create({
-      model: MODELS.GPT4_TURBO,
+      model: MODELS.GPT4O,
       messages: [
         {
           role: 'system',

@@ -113,7 +113,7 @@ suggested_improvements: List 1-3 SPECIFIC, ACTIONABLE improvements (not vague su
 Return ONLY the JSON object, no markdown.`
 
     const response = await openai.chat.completions.create({
-      model: MODELS.GPT4_TURBO,
+      model: MODELS.GPT4O,
       messages: [
         {
           role: 'system',

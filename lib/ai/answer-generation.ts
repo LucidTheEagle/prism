@@ -79,7 +79,7 @@ CONFIDENCE SCORING:
 Return ONLY the JSON object, no markdown, no explanation.`
 
     const response = await openai.chat.completions.create({
-      model: MODELS.GPT4_TURBO,
+      model: MODELS.GPT4O,
       messages: [
         {
           role: 'system',
@@ -216,7 +216,7 @@ Return ONLY a JSON object:
 Return ONLY the JSON object.`
 
     const response = await openai.chat.completions.create({
-      model: MODELS.GPT4_TURBO,
+      model: MODELS.GPT4O,
       messages: [
         {
           role: 'system',

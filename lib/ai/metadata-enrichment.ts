@@ -85,7 +85,7 @@ RESPOND WITH ONLY THE JSON OBJECT.`
 
   try {
     const response = await openai.chat.completions.create({
-      model: MODELS.GPT4_TURBO,
+      model: MODELS.GPT4O,
       messages: [
         {
           role: 'system',
@@ -180,7 +180,7 @@ RESPOND WITH ONLY THE JSON ARRAY.`
     console.log(`[Enrichment] Batch processing ${chunks.length} chunks...`)
 
     const response = await openai.chat.completions.create({
-      model: MODELS.GPT4_TURBO,
+      model: MODELS.GPT4O,
       messages: [
         {
           role: 'system',
