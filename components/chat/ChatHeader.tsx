@@ -202,9 +202,10 @@ export function ChatHeader({
 
           {hasMessages && (
             <button
-              onClick={onExport}
-              aria-label="Export conversation as Markdown file"
-              className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 min-w-[36px] min-h-[36px] flex items-center justify-center"
+             onClick={onExport}
+             aria-label="Export forensic PDF — opens print dialog"
+             title="Export Forensic PDF"
+             className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 min-w-[36px] min-h-[36px] flex items-center justify-center"
             >
               <Download className="w-4 h-4 text-slate-600 dark:text-slate-400" aria-hidden="true" />
             </button>
