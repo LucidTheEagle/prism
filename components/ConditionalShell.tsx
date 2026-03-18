@@ -95,7 +95,7 @@ function UserMenu({ user }: { user: SupabaseUser }) {
           </div>
 
           <Link
-            href="/"
+            href="/profile"
             role="menuitem"
             onClick={() => setOpen(false)}
             className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:bg-slate-50 dark:focus-visible:bg-slate-800 min-h-[44px]"
