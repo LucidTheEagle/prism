@@ -238,12 +238,40 @@ export default function ChatInterface({
         throw new Error(data.error || 'The AI returned an unsuccessful response')
       }
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Unknown error')
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(), role: 'assistant',
-        content: 'I encountered an error processing your request. Please try again.',
-        timestamp: new Date(),
-      }])
+      // Silent auto-retry — one automatic retry before surfacing any error
+      try {
+        setSubmitError('Taking longer than usual — retrying automatically…')
+
+        const retryResponse = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: userMessage.content, documentId: activeDocumentId || undefined }),
+        })
+
+        if (!retryResponse.ok) throw new Error('Retry failed')
+
+        const retryData = await retryResponse.json()
+        if (retryData.success) {
+          const assistantMessage: Message = {
+            id: (Date.now() + 1).toString(), role: 'assistant',
+            content: retryData.answer, confidence: retryData.confidence_score,
+            citations: retryData.citations, timestamp: new Date(),
+          }
+          setMessages(prev => [...prev, assistantMessage])
+          persistMessage(assistantMessage)
+          setSubmitError(null)
+        } else {
+          throw new Error(retryData.error || 'Retry unsuccessful')
+        }
+      } catch {
+        setSubmitError(null)
+        setMessages(prev => [...prev, {
+          id: (Date.now() + 1).toString(), role: 'assistant',
+          content: 'Unable to process your request. Please try again in a moment.',
+          timestamp: new Date(),
+        }])
+        console.error('[ChatInterface] Both attempts failed:', error)
+      }
     } finally {
       setIsLoading(false)
     }

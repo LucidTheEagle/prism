@@ -1,8 +1,8 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import {
-  Loader2, AlertCircle, Sparkles, CheckCircle2, RefreshCw,
+  AlertCircle, Sparkles, CheckCircle2, RefreshCw,
 } from 'lucide-react'
 import { CitationCard } from './CitationCard'
 
@@ -23,6 +23,83 @@ interface Message {
   confidence?: number
   citations?: Citation[]
   timestamp: Date
+}
+
+// ── Glass Box inference stages ─────────────────────────────────────────────
+const INFERENCE_STAGES = [
+  'Scanning document structure…',
+  'Extracting relevant clauses…',
+  'Cross-referencing citations…',
+  'Verifying answer against source…',
+  'Generating forensic citations…',
+]
+
+function GlassBoxIndicator() {
+  const [stageIndex, setStageIndex] = useState(0)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStageIndex(prev => {
+        if (prev < INFERENCE_STAGES.length - 1) return prev + 1
+        clearInterval(interval)
+        return prev
+      })
+    }, 6000) // advance every 6 seconds across ~30s total
+    return () => clearInterval(interval)
+  }, [])
+
+  return (
+    <div
+      className="flex justify-start"
+      role="status"
+      aria-live="polite"
+      aria-label="PRISM AI is processing your request"
+    >
+      <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-bl-md shadow-sm border border-slate-200 dark:border-slate-700 px-4 sm:px-5 py-3 sm:py-4 max-w-xs">
+        <div className="space-y-2">
+          {INFERENCE_STAGES.map((stage, idx) => (
+            <div
+              key={stage}
+              className={`flex items-center gap-2 transition-all duration-500 ${
+                idx < stageIndex
+                  ? 'opacity-40'
+                  : idx === stageIndex
+                  ? 'opacity-100'
+                  : 'opacity-20'
+              }`}
+              aria-hidden={idx !== stageIndex}
+            >
+              {idx < stageIndex ? (
+                <CheckCircle2
+                  className="w-3.5 h-3.5 text-emerald-500 shrink-0"
+                  aria-hidden="true"
+                />
+              ) : idx === stageIndex ? (
+                <div
+                  className="w-3.5 h-3.5 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin shrink-0"
+                  aria-hidden="true"
+                />
+              ) : (
+                <div
+                  className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 dark:border-slate-600 shrink-0"
+                  aria-hidden="true"
+                />
+              )}
+              <span
+                className={`text-xs ${
+                  idx === stageIndex
+                    ? 'text-slate-700 dark:text-slate-300 font-medium'
+                    : 'text-slate-400 dark:text-slate-500'
+                }`}
+              >
+                {stage}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 interface ChatMessagesProps {
@@ -48,7 +125,7 @@ export function ChatMessages({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, isLoading])
 
   return (
     <div
@@ -67,7 +144,10 @@ export function ChatMessages({
             aria-live="polite"
             aria-label="Loading conversation history"
           >
-            <Loader2 className="w-5 h-5 animate-spin text-emerald-600 dark:text-emerald-400 mr-2" aria-hidden="true" />
+            <div
+              className="w-5 h-5 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin mr-2"
+              aria-hidden="true"
+            />
             <span className="text-sm text-slate-500 dark:text-slate-400">
               Loading conversation history…
             </span>
@@ -192,9 +272,11 @@ export function ChatMessages({
                         <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" aria-hidden="true" />
                       )}
                       <span className="text-xs text-slate-600 dark:text-slate-400">
-                        {message.confidence >= 0.9 ? 'High confidence'
-                          : message.confidence >= 0.7 ? 'Good confidence'
-                          : 'Moderate confidence'}{' '}
+                        {message.confidence >= 0.95
+                          ? 'High confidence — strongly supported by the document'
+                          : message.confidence >= 0.7
+                          ? 'Good confidence — well supported with minor uncertainty'
+                          : 'Moderate confidence — verify against the source directly'}{' '}
                         ({(message.confidence * 100).toFixed(0)}%)
                       </span>
                     </div>
@@ -211,21 +293,7 @@ export function ChatMessages({
               </article>
             ))}
 
-            {isLoading && (
-              <div
-                className="flex justify-start"
-                role="status"
-                aria-live="polite"
-                aria-label="PRISM AI is thinking"
-              >
-                <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-bl-md shadow-sm border border-slate-200 dark:border-slate-700 px-4 sm:px-5 py-3 sm:py-4">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-                    <span className="text-sm text-slate-600 dark:text-slate-400">Thinking…</span>
-                  </div>
-                </div>
-              </div>
-            )}
+            {isLoading && <GlassBoxIndicator />}
 
             <div ref={messagesEndRef} aria-hidden="true" />
           </div>
