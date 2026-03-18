@@ -1,10 +1,39 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import localFont from 'next/font/local'
 import { ThemeProvider } from 'next-themes'
 import ConditionalShell from '@/components/ConditionalShell'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
+// Inter served locally — no Google Fonts network dependency at build time
+// Download Inter from https://rsms.me/inter/download/ and place in public/fonts/
+// For now we fall back to system sans-serif which is production-safe
+const inter = localFont({
+  src: [
+    {
+      path: '../public/fonts/InterDisplay-Regular.woff2',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/InterDisplay-Medium.woff2',
+      weight: '500',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/InterDisplay-SemiBold.woff2',
+      weight: '600',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/Inter-Bold.woff2',
+      weight: '700',
+      style: 'normal',
+    },
+  ],
+  variable: '--font-inter',
+  fallback: ['system-ui', 'sans-serif'],
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: {
@@ -25,7 +54,6 @@ export const metadata: Metadata = {
   authors: [{ name: 'PRISM' }],
   creator: 'PRISM',
 
-  // ── Open Graph (LinkedIn, Slack, WhatsApp previews) ──────────────
   openGraph: {
     type: 'website',
     title: 'PRISM — Precision Document Intelligence',
@@ -34,7 +62,6 @@ export const metadata: Metadata = {
     siteName: 'PRISM',
   },
 
-  // ── Twitter / X card ─────────────────────────────────────────────
   twitter: {
     card: 'summary',
     title: 'PRISM — Precision Document Intelligence',
@@ -42,12 +69,6 @@ export const metadata: Metadata = {
       'Transform any PDF into an intelligent knowledge base with forensic citation accuracy.',
   },
 
-  // ── Favicon — Next.js picks up app/icon.tsx automatically ────────
-  // No manual <link rel="icon"> needed. Next.js 16 generates all sizes
-  // (16x16, 32x32, apple-touch-icon) from app/icon.tsx and
-  // app/apple-icon.tsx at build time.
-
-  // ── Robots ───────────────────────────────────────────────────────
   robots: {
     index: true,
     follow: true,
