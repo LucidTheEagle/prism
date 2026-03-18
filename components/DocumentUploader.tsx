@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useId } from 'react'
-import { Upload, Loader2, XCircle } from 'lucide-react'
+import { Upload, Loader2, XCircle, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
 interface DocumentUploaderProps {
@@ -13,6 +13,7 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [isDuplicate, setIsDuplicate] = useState(false)
 
   const inputId = useId()
   const errorId = useId()
@@ -20,6 +21,7 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
 
   const handleUpload = useCallback(async (file: File) => {
     setError(null)
+    setIsDuplicate(false)
 
     if (file.type !== 'application/pdf') {
       setError('Only PDF files are supported. Please select a .pdf file.')
@@ -58,9 +60,16 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
 
       setUploadProgress(100)
 
-      setTimeout(() => {
-        onUploadComplete(data.documentId, data.fileUrl)
-      }, 500)
+      if (data.duplicate) {
+        setIsDuplicate(true)
+        setTimeout(() => {
+          onUploadComplete(data.documentId, data.fileUrl)
+        }, 1200)
+      } else {
+        setTimeout(() => {
+          onUploadComplete(data.documentId, data.fileUrl)
+        }, 500)
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
       setIsUploading(false)
@@ -140,7 +149,7 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
             />
             <div>
               <p className="text-base sm:text-lg font-medium text-slate-700 dark:text-slate-300">
-                Uploading…
+                {isDuplicate ? 'Document recognised…' : 'Uploading…'}
               </p>
               <div
                 role="progressbar"
@@ -162,7 +171,9 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
                 aria-live="polite"
                 aria-atomic="true"
               >
-                {uploadProgress}% uploaded
+                {isDuplicate
+                  ? 'Opening your existing analysis…'
+                  : `${uploadProgress}% uploaded`}
               </p>
             </div>
           </div>
@@ -222,6 +233,23 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
         aria-hidden="true"
         tabIndex={-1}
       />
+
+      {/* Duplicate detection notice */}
+      {isDuplicate && !error && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mt-4 p-3 sm:p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-center gap-3"
+        >
+          <CheckCircle2
+            className="w-5 h-5 text-emerald-500 shrink-0"
+            aria-hidden="true"
+          />
+          <p className="text-sm text-emerald-700 dark:text-emerald-400">
+            This document was already uploaded — opening your existing analysis.
+          </p>
+        </div>
+      )}
 
       {error && (
         <div
