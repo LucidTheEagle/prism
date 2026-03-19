@@ -9,11 +9,5 @@
     "app/api/chat/route.ts": {
       "maxDuration": 120
     }
-  },
-  "crons": [
-    {
-      "path": "/api/keep-alive",
-      "schedule": "*/5 * * * *"
-    }
-  ]
+  }
 }
