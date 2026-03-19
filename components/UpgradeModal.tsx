@@ -30,9 +30,9 @@ const CODE_COPY = {
 }
 
 const PRO_FEATURES = [
-  '25 documents per billing period',
-  'Unlimited queries',
-  'Up to 50MB per document',
+  `${TIER_LIMITS.pro.document_limit} documents per billing period`,
+  `${TIER_LIMITS.pro.query_limit} queries per billing period`,
+  `Up to ${TIER_LIMITS.pro.file_size_limit_mb}MB per document`,
   'Full audit log access',
   'Priority processing',
 ]
@@ -143,7 +143,7 @@ export function UpgradeModal({
           </div>
 
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            Starting at $199 / month. Cancel anytime.
+            Starting at $29 / month. Cancel anytime.
           </p>
         </div>
 
