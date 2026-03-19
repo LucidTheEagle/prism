@@ -83,7 +83,26 @@ export default function ChatInterface({
     tier: 'free',
   })
 
-  useEffect(() => { setMounted(true) }, [])
+  const [userEmail, setUserEmail] = useState<string>('')
+  const [userName, setUserName] = useState<string>('')
+  
+  useEffect(() => {
+    setMounted(true)
+    // Fetch user info for avatar
+    import('@/lib/supabase/client').then(({ createClient }) => {
+      const supabase = createClient()
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) {
+          setUserEmail(user.email ?? '')
+          setUserName(
+            user.user_metadata?.full_name ??
+            user.user_metadata?.name ??
+            ''
+          )
+        }
+      })
+    })
+  }, [])
 
   // ── Document selector ────────────────────────────────────────────────────
   const fetchAllDocuments = useCallback(async () => {
@@ -289,6 +308,8 @@ export default function ChatInterface({
         docsError={docsError}
         hasMessages={messages.length > 0}
         mounted={mounted}
+        userEmail={userEmail}
+        userName={userName}
         onSelectorOpen={handleSelectorOpen}
         onDocumentSwitch={handleDocumentSwitch}
         onDocsRetry={handleDocsRetry}
