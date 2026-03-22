@@ -24,33 +24,33 @@ function HowItWorksSection() {
     {
       icon: <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" aria-hidden="true" />,
       step: '01',
-      title: 'Adaptive Ingestion',
+      title: 'Secure Upload & Analysis',
       description:
-        'Your PDF is parsed and split into intelligent chunks using document structure — not arbitrary character counts. Legal clauses, technical sections, and narrative paragraphs are preserved as coherent units.',
-      badge: 'Adaptive Chunking',
+        'Your PDF is encrypted the moment it touches our servers. PRISM reads the document structure — preserving legal clauses, numbered sections, and defined terms as coherent units rather than cutting them arbitrarily.',
+      badge: 'Encrypted Ingestion',
     },
     {
       icon: <Search className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" aria-hidden="true" />,
       step: '02',
-      title: 'Hybrid Search',
+      title: 'Dual-Engine Search',
       description:
-        'Every query fires two retrieval engines simultaneously. Vector search finds semantically similar content across the entire document. BM25 keyword search finds exact terminology matches. Results are fused using Reciprocal Rank Fusion.',
-      badge: 'Vector + BM25 + RRF',
+        'Every query fires two search engines simultaneously. One finds content by meaning — so "penalties" finds "consequences of breach" even without the exact word. The other finds exact terminology matches — critical for clause references and defined terms.',
+      badge: 'Semantic + Keyword',
     },
     {
       icon: <GitMerge className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" aria-hidden="true" />,
       step: '03',
-      title: 'Multi-Pass Reasoning',
+      title: 'Self-Validating Reasoning',
       description:
-        'Retrieved passages are re-ranked by a second AI pass before the answer is generated. The system drafts an answer, then a critic model validates it against the source material, catching hallucinations before they reach you.',
-      badge: 'Self-Critique AI',
+        'PRISM drafts an answer, then a second AI layer reviews it against the source document before it reaches you — catching errors and unsupported claims. By the time you read the response, it has already been stress-tested.',
+      badge: 'Built-in Verification',
     },
     {
       icon: <Brain className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" aria-hidden="true" />,
       step: '04',
-      title: 'Verified Answer',
+      title: 'Verified Answer with Proof',
       description:
-        'Every answer arrives with a confidence score and pinned citations. Each citation is a clickable link that scrolls the PDF viewer to the exact paragraph the AI used. Zero ambiguity about where the answer came from.',
+        'Every answer arrives with a confidence score and a clickable citation that jumps your PDF viewer to the exact paragraph used. You never have to trust the system blindly — you verify every claim in seconds.',
       badge: 'Forensic Citations',
     },
   ]
