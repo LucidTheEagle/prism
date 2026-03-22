@@ -372,9 +372,9 @@ export default function Home() {
             </p>
             <ul className="flex items-center justify-center gap-3 sm:gap-6 text-xs text-slate-400 dark:text-slate-500 flex-wrap list-none">
               {[
-                'Hybrid Search (Vector + BM25)',
-                'Multi-Pass Validation',
-                'Self-Improving AI',
+                'Finds answers by meaning, not just keywords',
+                'Every answer verified before it reaches you',
+                'Cites the exact paragraph, every time',
               ].map((label) => (
                 <li key={label} className="flex items-center gap-1.5 sm:gap-2">
                   <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-emerald-500 rounded-full" aria-hidden="true" />
