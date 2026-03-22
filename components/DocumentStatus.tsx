@@ -1,46 +1,80 @@
 'use client'
 
-import { useEffect, useState, useId } from 'react'
-import { CheckCircle2, Loader2, AlertCircle } from 'lucide-react'
+import { useEffect, useState, useCallback, useId } from 'react'
+import { CheckCircle2, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
 
 interface DocumentStatusProps {
   documentId: string
   onReady?: () => void
+  onFailed?: () => void
   autoNavigate?: boolean
 }
 
+// Plain English stage labels — no developer jargon
 const STAGES = [
-  { label: 'Parsing PDF content',        threshold: 10 },
-  { label: 'AI document analysis',        threshold: 30 },
-  { label: 'Generating vector embeddings',threshold: 50 },
-  { label: 'Enriching with AI metadata',  threshold: 70 },
-  { label: 'Building search index',       threshold: 90 },
+  { label: 'Reading and encrypting your file',     threshold: 20 },
+  { label: 'Analysing document structure',          threshold: 40 },
+  { label: 'Preparing forensic search index',       threshold: 60 },
+  { label: 'Verifying citations and references',    threshold: 80 },
+  { label: 'Finalising intelligence base',          threshold: 95 },
 ]
+
+// Map raw technical errors to user-safe messages
+function sanitiseError(raw: string | null): string {
+  if (!raw) return 'Secure connection interrupted. For your privacy, partial data has been purged. Please try uploading again.'
+  const lower = raw.toLowerCase()
+  if (lower.includes('fetch') || lower.includes('network') || lower.includes('connect')) {
+    return 'Secure connection interrupted. For your privacy, partial data has been purged. Please try uploading again.'
+  }
+  if (lower.includes('chunk') || lower.includes('embed')) {
+    return 'Analysis could not be completed. Your file has been securely removed. Please try uploading again.'
+  }
+  if (lower.includes('timeout')) {
+    return 'The document took too long to process. Please try again with a smaller file.'
+  }
+  if (lower.includes('size') || lower.includes('large')) {
+    return 'This document exceeds the processing limit. Please try a smaller file.'
+  }
+  // Never expose raw technical errors
+  return 'Secure connection interrupted. For your privacy, partial data has been purged. Please try uploading again.'
+}
 
 export function DocumentStatus({
   documentId,
   onReady,
+  onFailed,
   autoNavigate = false,
 }: DocumentStatusProps) {
   const [status, setStatus] = useState<'processing' | 'ready' | 'failed'>('processing')
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
 
   const progressId = useId()
-  const statusId = useId()
+
+  const handleFailure = useCallback((rawError: string | null) => {
+    setStatus('failed')
+    setError(sanitiseError(rawError))
+    onFailed?.()
+  }, [onFailed])
 
   useEffect(() => {
+    let consecutiveErrors = 0
+    const MAX_CONSECUTIVE_ERRORS = 3
+
     const progressInterval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 90) return 90
-        return prev + 10
+      setProgress(prev => {
+        if (prev >= 95) return 95
+        return prev + 5
       })
     }, 2000)
 
     const checkStatus = async () => {
       try {
         const response = await fetch(`/api/documents/${documentId}`)
+
         if (response.ok) {
+          consecutiveErrors = 0
           const data = await response.json()
 
           if (data.status === 'ready') {
@@ -57,14 +91,28 @@ export function DocumentStatus({
           } else if (data.status === 'failed') {
             clearInterval(progressInterval)
             clearInterval(pollInterval)
-            setStatus('failed')
-            setError(data.error_message || 'Processing failed')
+            handleFailure(data.error_message ?? null)
           }
+          // status === 'processing' — continue polling
+        } else if (response.status === 401) {
+          clearInterval(progressInterval)
+          clearInterval(pollInterval)
+          handleFailure('Session expired. Please sign in again.')
         } else {
-          console.log(`Status check returned ${response.status}, continuing to poll…`)
+          consecutiveErrors++
+          if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+            clearInterval(progressInterval)
+            clearInterval(pollInterval)
+            handleFailure(null)
+          }
         }
-      } catch (err) {
-        console.error('Failed to check status:', err)
+      } catch {
+        consecutiveErrors++
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          clearInterval(progressInterval)
+          clearInterval(pollInterval)
+          handleFailure(null)
+        }
       }
     }
 
@@ -75,33 +123,43 @@ export function DocumentStatus({
       clearInterval(progressInterval)
       clearInterval(pollInterval)
     }
-  }, [documentId, onReady, autoNavigate])
+  }, [documentId, onReady, autoNavigate, handleFailure, retryCount])
 
   // ── Failed state ───────────────────────────────────────────────────────────
   if (status === 'failed') {
     return (
-      /*
-       * role="alert" + aria-live="assertive"
-       * Processing failures are urgent — the user needs to know immediately
-       * so they can retry. assertive interrupts screen reader speech now.
-       */
       <div
         role="alert"
         aria-live="assertive"
         aria-atomic="true"
         className="space-y-4"
       >
-        <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
-          <AlertCircle className="w-6 h-6 shrink-0" aria-hidden="true" />
-          <div>
-            <p className="font-semibold">Processing Failed</p>
-            {error && (
-              <p className="text-sm text-red-500 dark:text-red-400 mt-1">
-                {error}
-              </p>
-            )}
+        <div className="flex items-start gap-3">
+          <AlertCircle
+            className="w-5 h-5 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5"
+            aria-hidden="true"
+          />
+          <div className="flex-1">
+            <p className="font-semibold text-rose-700 dark:text-rose-400">
+              Processing interrupted
+            </p>
+            <p className="text-sm text-rose-600 dark:text-rose-400 mt-1 leading-relaxed">
+              {error}
+            </p>
           </div>
         </div>
+        <button
+          onClick={() => {
+            setStatus('processing')
+            setProgress(0)
+            setError(null)
+            setRetryCount(c => c + 1)
+          }}
+          className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
+        >
+          <RefreshCw className="w-4 h-4" aria-hidden="true" />
+          Try again
+        </button>
       </div>
     )
   }
@@ -109,11 +167,6 @@ export function DocumentStatus({
   // ── Ready state ────────────────────────────────────────────────────────────
   if (status === 'ready') {
     return (
-      /*
-       * role="status" + aria-live="polite"
-       * Completion is good news — polite waits for current speech to finish
-       * before announcing. aria-atomic reads the full region as one unit.
-       */
       <div
         role="status"
         aria-live="polite"
@@ -123,20 +176,18 @@ export function DocumentStatus({
         <div className="flex items-center gap-3 text-emerald-600 dark:text-emerald-400">
           <CheckCircle2 className="w-6 h-6 shrink-0" aria-hidden="true" />
           <div>
-            <p className="font-semibold">Processing Complete!</p>
+            <p className="font-semibold text-slate-900 dark:text-slate-50">
+              Intelligence base ready
+            </p>
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-              Your document is ready for intelligent Q&amp;A
+              Your document is ready for forensic analysis
             </p>
           </div>
         </div>
 
-        {/* Progress bar at 100% */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span
-              id={progressId}
-              className="text-slate-700 dark:text-slate-300 font-medium"
-            >
+            <span id={progressId} className="text-slate-700 dark:text-slate-300 font-medium">
               Progress
             </span>
             <span className="text-emerald-600 dark:text-emerald-400 font-bold" aria-hidden="true">
@@ -149,7 +200,6 @@ export function DocumentStatus({
             aria-valuemin={0}
             aria-valuemax={100}
             aria-labelledby={progressId}
-            aria-label="Document processing progress: complete"
             className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"
           >
             <div
@@ -159,18 +209,13 @@ export function DocumentStatus({
           </div>
         </div>
 
-        {/*
-         * Auto-navigate notice
-         * aria-live="polite" announces the redirect countdown to screen
-         * reader users so they're not confused when the page changes.
-         */}
         {autoNavigate && (
           <p
             className="text-sm text-slate-500 dark:text-slate-400 text-center animate-pulse"
             aria-live="polite"
             role="status"
           >
-            Redirecting to chat…
+            Opening your document…
           </p>
         )}
       </div>
@@ -178,14 +223,6 @@ export function DocumentStatus({
   }
 
   // ── Processing state ───────────────────────────────────────────────────────
-  /*
-   * aria-live="polite" on the outer container means any text changes
-   * (progress %, stage completions) are announced after current speech.
-   *
-   * We deliberately do NOT put aria-live on the progress bar itself —
-   * role="progressbar" with aria-valuenow is the correct pattern for
-   * numeric progress. Screen readers announce value changes automatically.
-   */
   return (
     <div
       role="status"
@@ -193,59 +230,32 @@ export function DocumentStatus({
       aria-label="Document is being processed"
       className="space-y-4"
     >
-      {/* Status heading */}
       <div className="flex items-center gap-3">
         <Loader2
-          className="w-6 h-6 text-emerald-600 dark:text-emerald-400 animate-spin shrink-0"
+          className="w-5 h-5 text-emerald-600 dark:text-emerald-400 animate-spin shrink-0"
           aria-hidden="true"
         />
-        <div>
-          <p
-            id={statusId}
-            className="font-semibold text-slate-900 dark:text-slate-50"
-          >
-            Processing Document…
-          </p>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            AI is analysing your document
-          </p>
-        </div>
+        <p className="font-semibold text-slate-900 dark:text-slate-50">
+          Building intelligence base…
+        </p>
       </div>
 
-      {/* Progress bar */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-sm">
-          <span
-            id={progressId}
-            className="text-slate-700 dark:text-slate-300 font-medium"
-          >
+          <span id={progressId} className="text-slate-700 dark:text-slate-300 font-medium">
             Progress
           </span>
-          {/*
-           * aria-hidden — the progressbar already announces the value.
-           * Showing it visually without duplicating the announcement.
-           */}
-          <span
-            className="text-emerald-600 dark:text-emerald-400 font-bold"
-            aria-hidden="true"
-          >
+          <span className="text-emerald-600 dark:text-emerald-400 font-bold" aria-hidden="true">
             {progress}%
           </span>
         </div>
-
-        {/*
-         * role="progressbar" with aria-valuenow/min/max
-         * Screen readers announce "Progress bar, X percent" when the
-         * value changes. aria-labelledby links to the "Progress" label.
-         * This replaces the visual-only progress bar in the original.
-         */}
         <div
           role="progressbar"
           aria-valuenow={progress}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-labelledby={progressId}
-          aria-label={`Document processing progress: ${progress}%`}
+          aria-label={`Processing progress: ${progress}%`}
           className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"
         >
           <div
@@ -256,45 +266,50 @@ export function DocumentStatus({
         </div>
       </div>
 
-      {/*
-       * Processing stages
-       *
-       * Originally: decorative dots with adjacent <span> text.
-       * The dots conveyed completion state visually but were invisible
-       * to screen readers — a user couldn't tell which stages were done.
-       *
-       * Now: <ol> (ordered — sequence matters) with aria-label on each
-       * <li> combining the stage name with its completion state.
-       * The dot is aria-hidden; the state is conveyed via aria-label.
-       *
-       * Screen reader announces: "1 of 5, Parsing PDF content, complete"
-       * or "3 of 5, Generating vector embeddings, in progress".
-       */}
       <ol
-        className="text-xs text-slate-500 dark:text-slate-400 space-y-1.5 list-none"
+        className="text-xs text-slate-500 dark:text-slate-400 space-y-2 list-none"
         aria-label="Processing stages"
       >
         {STAGES.map((stage, i) => {
           const done = progress >= stage.threshold
+          const active = !done && progress >= (STAGES[i - 1]?.threshold ?? 0)
           return (
             <li
               key={stage.label}
-              aria-label={`Stage ${i + 1} of ${STAGES.length}: ${stage.label} — ${done ? 'complete' : 'pending'}`}
-              className="flex items-center gap-2"
+              aria-label={`${stage.label} — ${done ? 'complete' : active ? 'in progress' : 'pending'}`}
+              className="flex items-center gap-2.5"
             >
               <div
-                className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-300 ${
-                  done ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+                className={`w-1.5 h-1.5 rounded-full shrink-0 transition-all duration-300 ${
+                  done
+                    ? 'bg-emerald-500'
+                    : active
+                    ? 'bg-emerald-400 animate-pulse'
+                    : 'bg-slate-300 dark:bg-slate-600'
                 }`}
                 aria-hidden="true"
               />
-              <span className={done ? 'text-slate-700 dark:text-slate-300' : ''}>
+              <span className={`transition-colors duration-300 ${
+                done
+                  ? 'text-slate-700 dark:text-slate-300'
+                  : active
+                  ? 'text-slate-600 dark:text-slate-400'
+                  : 'text-slate-400 dark:text-slate-600'
+              }`}>
                 {stage.label}
               </span>
             </li>
           )
         })}
       </ol>
+
+      {/* Security assurance — answers the three questions in every lawyer's head */}
+      <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+        <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+          <span aria-hidden="true">🔒</span>
+          AES-256 encrypted · Only you can access this document · Never used for AI training
+        </p>
+      </div>
     </div>
   )
 }

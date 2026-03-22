@@ -169,6 +169,7 @@ export default function Home() {
   const router = useRouter()
   const [documentId, setDocumentId] = useState<string | null>(null)
   const [documentReady, setDocumentReady] = useState(false)
+  const [processingFailed, setProcessingFailed] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [authLoaded, setAuthLoaded] = useState(false)
 
@@ -189,6 +190,8 @@ export default function Home() {
 
   const handleUploadComplete = (id: string) => {
     setDocumentId(id)
+    setDocumentReady(false)
+    setProcessingFailed(false)
   }
 
   const handleDocumentReady = () => {
@@ -201,75 +204,74 @@ export default function Home() {
     }
   }
 
-  // ── Processing / Ready state ───────────────────────────────────────────────
-  if (documentId) {
-    return (
-      <main className="min-h-full bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4">
-        <div className="w-full max-w-2xl">
-          <div
-            className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg p-5 sm:p-8"
-            role="status"
-            aria-live="polite"
-            aria-label="Document processing status"
-          >
-            <div className="text-center mb-5 sm:mb-6">
-              <div
-                className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"
-                aria-hidden="true"
-              >
-                <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-white" aria-hidden="true" />
-              </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-50 mb-2">
-                Document Uploaded Successfully!
-              </h2>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Processing your document with AI…
-              </p>
+ // ── Processing / Ready state ───────────────────────────────────────────────
+ if (documentId) {
+  return (
+    <main className="min-h-full bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl">
+        <div
+          className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg p-5 sm:p-8"
+          role="status"
+          aria-live="polite"
+          aria-label="Document processing status"
+        >
+          <div className="text-center mb-5 sm:mb-6">
+            <div
+              className={`w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg ${
+                documentReady
+                  ? 'bg-gradient-to-br from-emerald-500 to-emerald-600'
+                  : processingFailed
+                    ? 'bg-gradient-to-br from-rose-500 to-rose-600'
+                    : 'bg-gradient-to-br from-slate-400 to-slate-500'
+              }`}
+              aria-hidden="true"
+            >
+              <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-white" aria-hidden="true" />
             </div>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-50 mb-2">
+              {documentReady
+                ? 'Document Ready for Analysis'
+                : processingFailed
+                  ? 'Upload Interrupted'
+                  : 'Building Intelligence Base…'}
+            </h2>
+          </div>
 
-            <DocumentStatus
-              documentId={documentId}
-              onReady={handleDocumentReady}
-              autoNavigate={true}
-            />
+          <DocumentStatus
+            documentId={documentId}
+            onReady={handleDocumentReady}
+            onFailed={() => setProcessingFailed(true)}
+            autoNavigate={!processingFailed}
+          />
 
-            <div className="mt-5 sm:mt-6 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
-              <p className="text-sm text-slate-700 dark:text-slate-300 mb-2 font-medium">
-                What&apos;s happening:
-              </p>
-              <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-1 ml-4 list-disc">
-                <li>Document saved securely to encrypted storage</li>
-                <li>AI analysis and adaptive chunking</li>
-                <li>Vector embeddings generation (1536 dimensions)</li>
-                <li>Metadata enrichment with AI summaries</li>
-                <li>Hybrid search indexing (Vector + BM25)</li>
-              </ul>
-            </div>
-
-            <div className="mt-5 sm:mt-6 flex flex-col sm:flex-row gap-3">
-              {documentReady && (
-                <button
-                  onClick={handleChatClick}
-                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-br from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-lg transition-all shadow-md hover:shadow-lg font-medium text-sm sm:text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 min-h-[44px]"
-                  aria-label="Start chatting with your uploaded document"
-                >
-                  <MessageSquare className="w-5 h-5" aria-hidden="true" />
-                  Start Chatting
-                </button>
-              )}
+          <div className="mt-5 sm:mt-6 flex flex-col sm:flex-row gap-3">
+            {documentReady && (
               <button
-                onClick={() => setDocumentId(null)}
-                className="px-6 py-3 text-sm bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 min-h-[44px]"
-                aria-label="Discard this document and upload another"
+                onClick={handleChatClick}
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-br from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-lg transition-all shadow-md hover:shadow-lg font-medium text-sm sm:text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 min-h-[44px]"
+                aria-label="Start chatting with your uploaded document"
               >
-                Upload Another
+                <MessageSquare className="w-5 h-5" aria-hidden="true" />
+                Begin Analysis
               </button>
-            </div>
+            )}
+            <button
+              onClick={() => {
+                setDocumentId(null)
+                setDocumentReady(false)
+                setProcessingFailed(false)
+              }}
+              className="px-6 py-3 text-sm bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 min-h-[44px]"
+              aria-label="Upload another document"
+            >
+              Upload Another
+            </button>
           </div>
         </div>
-      </main>
-    )
-  }
+      </div>
+    </main>
+  )
+}
 
   // ── Landing page ───────────────────────────────────────────────────────────
   return (
