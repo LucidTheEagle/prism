@@ -25,6 +25,44 @@ interface Message {
   timestamp: Date
 }
 
+function normalizeCitationText(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w\s]/g, '')
+    .trim()
+}
+
+function getCitationDedupKey(citation: Citation) {
+  const normalizedText = normalizeCitationText(citation.text)
+  const start = normalizedText.slice(0, 120)
+  const end = normalizedText.slice(-80)
+  return `p${citation.page}|${start}|${end}`
+}
+
+function dedupeAndRankCitations(citations: Citation[]) {
+  const byKey = new Map<string, Citation>()
+
+  citations.forEach(citation => {
+    const key = getCitationDedupKey(citation)
+    const existing = byKey.get(key)
+    if (!existing) {
+      byKey.set(key, citation)
+      return
+    }
+
+    const currentScore = citation.relevance + (citation.ai_summary ? 0.01 : 0)
+    const existingScore = existing.relevance + (existing.ai_summary ? 0.01 : 0)
+    if (currentScore > existingScore) byKey.set(key, citation)
+  })
+
+  return [...byKey.values()].sort((a, b) => {
+    if (b.relevance !== a.relevance) return b.relevance - a.relevance
+    if (a.page !== b.page) return a.page - b.page
+    return a.chunk_index - b.chunk_index
+  })
+}
+
 // ── Glass Box inference stages ─────────────────────────────────────────────
 const INFERENCE_STAGES = [
   'Scanning document structure…',
@@ -239,27 +277,31 @@ export function ChatMessages({
                     <p className="m-0 text-sm sm:text-base">{message.content}</p>
                   )}
 
-                  {message.citations && message.citations.length > 0 && (
-                    <section
-                      className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-600"
-                      aria-label={`${message.citations.length} source${message.citations.length > 1 ? 's' : ''} cited`}
-                    >
-                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                        Sources:
-                      </p>
-                      <ul className="space-y-2 list-none">
-                        {message.citations.map((citation, idx) => (
-                          <li key={citation.chunk_id}>
-                            <CitationCard
-                              citation={citation}
-                              index={idx}
-                              onCitationClick={onCitationClick}
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  )}
+                  {message.citations && message.citations.length > 0 && (() => {
+                    const dedupedCitations = dedupeAndRankCitations(message.citations)
+
+                    return (
+                      <section
+                        className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-600"
+                        aria-label={`${dedupedCitations.length} source${dedupedCitations.length > 1 ? 's' : ''} cited`}
+                      >
+                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                          Sources:
+                        </p>
+                        <ul className="space-y-2 list-none">
+                          {dedupedCitations.map((citation, idx) => (
+                            <li key={`${citation.chunk_id}-${citation.page}-${citation.chunk_index}`}>
+                              <CitationCard
+                                citation={citation}
+                                index={idx}
+                                onCitationClick={onCitationClick}
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    )
+                  })()}
 
                   {message.confidence !== undefined && (
                     <div

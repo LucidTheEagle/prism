@@ -82,7 +82,7 @@ export function ChatInput({
               aria-label="Message input"
               aria-describedby="chat-input-hint"
               aria-disabled={isDisabled}
-              className="w-full px-3 sm:px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-shadow text-sm sm:text-base"
+              className="w-full px-3 sm:px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-shadow text-sm sm:text-base"
               style={{ minHeight: '48px', maxHeight: '120px' }}
             />
           </div>

@@ -107,7 +107,7 @@ export default function PDFViewer({ documentId, targetPage }: PDFViewerProps) {
      * (not on mouse click) via the :focus-visible CSS pseudo-class.
      */
     <div
-      className="h-full flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500"
+      className="h-full flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500"
       tabIndex={0}
       onKeyDown={handleKeyDown}
       aria-label="PDF document viewer"
@@ -128,7 +128,7 @@ export default function PDFViewer({ documentId, targetPage }: PDFViewerProps) {
             disabled={currentPage <= 1 || isLoading}
             aria-label={`Go to previous page (currently page ${currentPage} of ${numPages})`}
             aria-disabled={currentPage <= 1 || isLoading}
-            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
+            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
           >
             <ChevronLeft className="w-4 h-4 text-slate-600 dark:text-slate-400" aria-hidden="true" />
           </button>
@@ -155,7 +155,7 @@ export default function PDFViewer({ documentId, targetPage }: PDFViewerProps) {
             disabled={currentPage >= numPages || isLoading}
             aria-label={`Go to next page (currently page ${currentPage} of ${numPages})`}
             aria-disabled={currentPage >= numPages || isLoading}
-            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
+            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
           >
             <ChevronRight className="w-4 h-4 text-slate-600 dark:text-slate-400" aria-hidden="true" />
           </button>
@@ -168,7 +168,7 @@ export default function PDFViewer({ documentId, targetPage }: PDFViewerProps) {
             disabled={scale <= 0.6 || isLoading}
             aria-label={`Zoom out (current zoom ${zoomPercent}%)`}
             aria-disabled={scale <= 0.6 || isLoading}
-            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
+            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
           >
             <ZoomOut className="w-4 h-4 text-slate-600 dark:text-slate-400" aria-hidden="true" />
           </button>
@@ -187,7 +187,7 @@ export default function PDFViewer({ documentId, targetPage }: PDFViewerProps) {
             disabled={scale >= 2.0 || isLoading}
             aria-label={`Zoom in (current zoom ${zoomPercent}%)`}
             aria-disabled={scale >= 2.0 || isLoading}
-            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
+            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
           >
             <ZoomIn className="w-4 h-4 text-slate-600 dark:text-slate-400" aria-hidden="true" />
           </button>
