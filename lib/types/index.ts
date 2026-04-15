@@ -448,3 +448,254 @@ free: process.env.STRIPE_PRICE_FREE ?? 'price_free_mock_2026',
 pro: process.env.STRIPE_PRICE_PRO ?? 'price_pro_mock_2026',
 enterprise: process.env.STRIPE_PRICE_ENTERPRISE ?? 'price_enterprise_mock_2026',
 } as const
+
+// ============================================================================
+// PIPELINE TYPES — SUITS INTELLIGENCE PIPELINE (V1)
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// EPISTEMIC CATEGORY
+// ----------------------------------------------------------------------------
+
+export type EpistemicCategory =
+  | 'EXPLICITLY_STATED'
+  | 'INFERRED'
+  | 'SILENT'
+
+// ----------------------------------------------------------------------------
+// CHUNK METADATA — LOCKED SCHEMA (Fix 5)
+// All five fields mandatory. Non-optional. Enforced at ingestion and chunking.
+// ----------------------------------------------------------------------------
+
+export interface ChunkMetadata {
+  tenant_id: string
+  document_id: string
+  page_number: number
+  section_header: string
+  chunk_index: number
+}
+
+// ----------------------------------------------------------------------------
+// RACHEL ZANE — RETRIEVAL SPECIALIST
+// Stage 1. Gemini 2.5 Pro via Google AI API.
+// Input: full document text + query.
+// Output: RachelOutput — structured evidence package.
+// ----------------------------------------------------------------------------
+
+export type RachelRetrievalStatus = 'responsive' | 'partial' | 'empty'
+export type RachelResponsiveness = 'responsive' | 'adjacent'
+
+export interface RachelClaim {
+  claim_id: string                    // e.g. "R-001"
+  responsiveness: RachelResponsiveness
+  claim_text: string                  // verbatim — no paraphrase
+  source_chunk_id: string
+  page_number: number | 'unknown'
+  section_reference: string | 'unknown'
+  adjacent_note?: string              // populated only when responsiveness is 'adjacent'
+}
+
+export interface RachelOutput {
+  retrieval_status: RachelRetrievalStatus
+  query_received: string
+  search_scope: 'full_document'       // always full_document — locked
+  claims: RachelClaim[]
+  empty_declaration?: string          // populated only when retrieval_status is 'empty'
+}
+
+// ----------------------------------------------------------------------------
+// MIKE ROSS — VERIFICATION AUDITOR
+// Stage 2. Claude Haiku 4.5 via Anthropic API. Model: claude-haiku-4-5-20251001
+// Input: RachelOutput + source document content.
+// Output: MikeOutput — discriminated union on audit_status.
+// ----------------------------------------------------------------------------
+
+export type MikeAuditStatus =
+  | 'verified'
+  | 'partial'
+  | 'empty'
+  | 'retry_triggered'
+
+export interface MikeVerifiedClaim {
+  claim_id: string                    // matches Rachel's claim_id exactly
+  claim_text: string                  // unchanged from Rachel's output
+  verified: true
+  source_chunk_id: string
+  page_number: number                 // confirmed or corrected — never 'unknown'
+  section_reference: string           // confirmed or corrected
+  failure_reason: null
+}
+
+export interface MikeBlockedClaim {
+  claim_id: string
+  claim_text: string                  // unchanged from Rachel's output
+  verified: false
+  source_chunk_id: string
+  page_number: number | 'unknown'
+  section_reference: string | 'unknown'
+  failure_reason: string              // precise reason — never null
+}
+
+export interface MikeAdjacentClaim {
+  claim_id: string
+  claim_text: string                  // unchanged from Rachel's output
+  responsiveness: 'adjacent'
+  adjacent_note: string               // Rachel's note — unchanged
+  source_chunk_id: string
+  page_number: number | 'unknown'
+  section_reference: string | 'unknown'
+}
+
+// Schema A — standard output, no retry
+export interface MikeOutputStandard {
+  audit_status: 'verified' | 'partial' | 'empty'
+  claims_audited: number
+  claims_verified: number
+  claims_blocked: number
+  retry_triggered: false
+  retry_attempted: false
+  retry_failed: false
+  verified_claims: MikeVerifiedClaim[]
+  adjacent_claims: MikeAdjacentClaim[]
+  blocked_claims: MikeBlockedClaim[]
+}
+
+// Schema B — retry triggered, moment of triggering
+export interface MikeOutputRetryTriggered {
+  audit_status: 'retry_triggered'
+  claims_audited: number
+  claims_verified: 0
+  claims_blocked: number
+  retry_triggered: true
+  retry_attempted: false
+  retry_failed: false
+  retry_query: string                 // reformulated — not a restatement
+  retry_rationale: string             // specific reason original search failed
+  verified_claims: []
+  adjacent_claims: []
+  blocked_claims: MikeBlockedClaim[]
+}
+
+// Schema C — terminal failure
+export interface MikeOutputTerminal {
+  audit_status: 'empty'
+  claims_audited: number              // cumulative across both passes
+  claims_verified: 0
+  claims_blocked: number              // cumulative
+  retry_triggered: true
+  retry_attempted: true
+  retry_failed: true
+  verified_claims: []
+  adjacent_claims: []
+  blocked_claims: MikeBlockedClaim[]
+}
+
+// Discriminated union — the type the orchestrator works with
+export type MikeOutput =
+  | MikeOutputStandard
+  | MikeOutputRetryTriggered
+  | MikeOutputTerminal
+
+// ----------------------------------------------------------------------------
+// KATRINA BENNETT — RISK & IMPLICATION ANALYST
+// Stage 3. Claude Sonnet 4.6 via Anthropic API. Model: claude-sonnet-4-6
+// Shared ANTHROPIC_API_KEY with Mike. Separate system prompt.
+// Conditional activation only. Silent output is valid and correct output.
+// ----------------------------------------------------------------------------
+
+export type KatrinaActivationStatus = 'active' | 'silent'
+
+export type KatrinaRiskCategory =
+  | 'liability_exposure'
+  | 'enforcement_uncertainty'
+  | 'structural_asymmetry'
+  | 'drafting_gap'
+  | 'jurisdictional_risk'
+  | 'commercial_exposure'
+  | 'privilege_or_confidentiality_risk'
+
+export interface KatrinaRiskFinding {
+  finding_id: string                  // e.g. "K-001"
+  risk_category: KatrinaRiskCategory  // locked taxonomy — no free-text
+  finding: string                     // opens with mandatory epistemic marker
+  adversarial_angle: string           // how opposing counsel uses this finding
+  verified_claim_ids: string[]        // anchors to Mike's verified_claims
+  adjacent_claim_ids: string[]        // contextual only — never verified facts
+}
+
+export interface KatrinaAdversarialEntry {
+  vulnerability: string
+  opposing_argument: string
+  leverage_holder: 'client' | 'developer' | 'neither' | 'disputed'
+  verified_claim_ids: string[]
+}
+
+export interface KatrinaDraftingGap {
+  gap_id: string                      // e.g. "G-001"
+  absent_provision: string            // exact name of missing clause
+  consequence: string                 // specific legal/commercial consequence
+  verified_basis: string              // which Mike claim establishes absence
+  adversarial_consequence: string     // how gap would be exploited in dispute
+}
+
+export interface KatrinaAnalyticalBrief {
+  epistemic_baseline: string          // declared before any analysis — Harvey reads first
+  risk_findings: KatrinaRiskFinding[]
+  adversarial_exploitation_matrix: KatrinaAdversarialEntry[]
+  drafting_gaps: KatrinaDraftingGap[]
+  structural_summary: string          // Harvey's opening — 2-4 sentences
+}
+
+// Active output
+export interface KatrinaOutputActive {
+  activation_status: 'active'
+  analytical_brief: KatrinaAnalyticalBrief
+}
+
+// Silent output — correct and valid
+export interface KatrinaOutputSilent {
+  activation_status: 'silent'
+  reason: string                      // one line — why activation not required
+}
+
+// Discriminated union
+export type KatrinaOutput = KatrinaOutputActive | KatrinaOutputSilent
+
+// ----------------------------------------------------------------------------
+// HARVEY SPECTER — SYNTHESIS & VERDICT
+// Stage 4. GPT-5.1 via Azure AI Foundry.
+// The only voice the user sees. Synthesizes from pipeline only.
+// ----------------------------------------------------------------------------
+
+export interface HarveyOutput {
+  epistemic_category: EpistemicCategory
+  answer: string                      // calibrated to category — inline citations
+  closing_statement: string           // one sentence — category-appropriate
+}
+
+// ----------------------------------------------------------------------------
+// PIPELINE RESULT — COMPLETE ORCHESTRATOR OUTPUT
+// Carries all four character outputs for chain of custody log.
+// ----------------------------------------------------------------------------
+
+export interface PipelineResult {
+  // Final output
+  harvey: HarveyOutput
+
+  // Audit trail — all four character outputs preserved
+  rachel: RachelOutput
+  mike: MikeOutput
+  katrina: KatrinaOutput
+
+  // Pipeline metadata
+  query: string
+  document_id: string
+  retry_attempted: boolean
+  total_time_ms: number
+  tokens_per_character: {
+    rachel: { input: number; output: number }
+    mike: { input: number; output: number }
+    katrina: { input: number; output: number }
+    harvey: { input: number; output: number }
+  }
+}
