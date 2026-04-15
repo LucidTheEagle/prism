@@ -450,7 +450,7 @@ enterprise: process.env.STRIPE_PRICE_ENTERPRISE ?? 'price_enterprise_mock_2026',
 } as const
 
 // ============================================================================
-// PIPELINE TYPES — SUITS INTELLIGENCE PIPELINE (V1)
+// PIPELINE TYPES — PRISM INTELLIGENCE PIPELINE (V1)
 // ============================================================================
 
 // ----------------------------------------------------------------------------
@@ -476,18 +476,18 @@ export interface ChunkMetadata {
 }
 
 // ----------------------------------------------------------------------------
-// RACHEL ZANE — RETRIEVAL SPECIALIST
+// ALETHEIA — RETRIEVAL SPECIALIST
 // Stage 1. Gemini 2.5 Pro via Google AI API.
 // Input: full document text + query.
-// Output: RachelOutput — structured evidence package.
+// Output: AletheiaOutput — structured evidence package.
 // ----------------------------------------------------------------------------
 
-export type RachelRetrievalStatus = 'responsive' | 'partial' | 'empty'
-export type RachelResponsiveness = 'responsive' | 'adjacent'
+export type AletheiaRetrievalStatus = 'responsive' | 'partial' | 'empty'
+export type AletheiaResponsiveness = 'responsive' | 'adjacent'
 
-export interface RachelClaim {
-  claim_id: string                    // e.g. "R-001"
-  responsiveness: RachelResponsiveness
+export interface AletheiaClaim {
+  claim_id: string                    // e.g. "A-001"
+  responsiveness: AletheiaResponsiveness
   claim_text: string                  // verbatim — no paraphrase
   source_chunk_id: string
   page_number: number | 'unknown'
@@ -495,30 +495,30 @@ export interface RachelClaim {
   adjacent_note?: string              // populated only when responsiveness is 'adjacent'
 }
 
-export interface RachelOutput {
-  retrieval_status: RachelRetrievalStatus
+export interface AletheiaOutput {
+  retrieval_status: AletheiaRetrievalStatus
   query_received: string
   search_scope: 'full_document'       // always full_document — locked
-  claims: RachelClaim[]
+  claims: AletheiaClaim[]
   empty_declaration?: string          // populated only when retrieval_status is 'empty'
 }
 
 // ----------------------------------------------------------------------------
-// MIKE ROSS — VERIFICATION AUDITOR
+// KRATOS — VERIFICATION AUDITOR
 // Stage 2. Claude Haiku 4.5 via Anthropic API. Model: claude-haiku-4-5-20251001
-// Input: RachelOutput + source document content.
-// Output: MikeOutput — discriminated union on audit_status.
+// Input: AletheiaOutput + source document content.
+// Output: KratosOutput — discriminated union on audit_status.
 // ----------------------------------------------------------------------------
 
-export type MikeAuditStatus =
+export type KratosAuditStatus =
   | 'verified'
   | 'partial'
   | 'empty'
   | 'retry_triggered'
 
-export interface MikeVerifiedClaim {
-  claim_id: string                    // matches Rachel's claim_id exactly
-  claim_text: string                  // unchanged from Rachel's output
+export interface KratosVerifiedClaim {
+  claim_id: string                    // matches Aletheia's claim_id exactly
+  claim_text: string                  // unchanged from Aletheia's output
   verified: true
   source_chunk_id: string
   page_number: number                 // confirmed or corrected — never 'unknown'
@@ -526,9 +526,9 @@ export interface MikeVerifiedClaim {
   failure_reason: null
 }
 
-export interface MikeBlockedClaim {
+export interface KratosBlockedClaim {
   claim_id: string
-  claim_text: string                  // unchanged from Rachel's output
+  claim_text: string                  // unchanged from Aletheia's output
   verified: false
   source_chunk_id: string
   page_number: number | 'unknown'
@@ -536,18 +536,18 @@ export interface MikeBlockedClaim {
   failure_reason: string              // precise reason — never null
 }
 
-export interface MikeAdjacentClaim {
+export interface KratosAdjacentClaim {
   claim_id: string
-  claim_text: string                  // unchanged from Rachel's output
+  claim_text: string                  // unchanged from Aletheia's output
   responsiveness: 'adjacent'
-  adjacent_note: string               // Rachel's note — unchanged
+  adjacent_note: string               // Aletheia's note — unchanged
   source_chunk_id: string
   page_number: number | 'unknown'
   section_reference: string | 'unknown'
 }
 
 // Schema A — standard output, no retry
-export interface MikeOutputStandard {
+export interface KratosOutputStandard {
   audit_status: 'verified' | 'partial' | 'empty'
   claims_audited: number
   claims_verified: number
@@ -555,13 +555,13 @@ export interface MikeOutputStandard {
   retry_triggered: false
   retry_attempted: false
   retry_failed: false
-  verified_claims: MikeVerifiedClaim[]
-  adjacent_claims: MikeAdjacentClaim[]
-  blocked_claims: MikeBlockedClaim[]
+  verified_claims: KratosVerifiedClaim[]
+  adjacent_claims: KratosAdjacentClaim[]
+  blocked_claims: KratosBlockedClaim[]
 }
 
 // Schema B — retry triggered, moment of triggering
-export interface MikeOutputRetryTriggered {
+export interface KratosOutputRetryTriggered {
   audit_status: 'retry_triggered'
   claims_audited: number
   claims_verified: 0
@@ -573,11 +573,11 @@ export interface MikeOutputRetryTriggered {
   retry_rationale: string             // specific reason original search failed
   verified_claims: []
   adjacent_claims: []
-  blocked_claims: MikeBlockedClaim[]
+  blocked_claims: KratosBlockedClaim[]
 }
 
 // Schema C — terminal failure
-export interface MikeOutputTerminal {
+export interface KratosOutputTerminal {
   audit_status: 'empty'
   claims_audited: number              // cumulative across both passes
   claims_verified: 0
@@ -587,25 +587,25 @@ export interface MikeOutputTerminal {
   retry_failed: true
   verified_claims: []
   adjacent_claims: []
-  blocked_claims: MikeBlockedClaim[]
+  blocked_claims: KratosBlockedClaim[]
 }
 
 // Discriminated union — the type the orchestrator works with
-export type MikeOutput =
-  | MikeOutputStandard
-  | MikeOutputRetryTriggered
-  | MikeOutputTerminal
+export type KratosOutput =
+  | KratosOutputStandard
+  | KratosOutputRetryTriggered
+  | KratosOutputTerminal
 
 // ----------------------------------------------------------------------------
-// KATRINA BENNETT — RISK & IMPLICATION ANALYST
+// PRONOIA — RISK & IMPLICATION ANALYST
 // Stage 3. Claude Sonnet 4.6 via Anthropic API. Model: claude-sonnet-4-6
-// Shared ANTHROPIC_API_KEY with Mike. Separate system prompt.
+// Shared ANTHROPIC_API_KEY with Kratos. Separate system prompt.
 // Conditional activation only. Silent output is valid and correct output.
 // ----------------------------------------------------------------------------
 
-export type KatrinaActivationStatus = 'active' | 'silent'
+export type PronoiaActivationStatus = 'active' | 'silent'
 
-export type KatrinaRiskCategory =
+export type PronoiaRiskCategory =
   | 'liability_exposure'
   | 'enforcement_uncertainty'
   | 'structural_asymmetry'
@@ -614,60 +614,60 @@ export type KatrinaRiskCategory =
   | 'commercial_exposure'
   | 'privilege_or_confidentiality_risk'
 
-export interface KatrinaRiskFinding {
-  finding_id: string                  // e.g. "K-001"
-  risk_category: KatrinaRiskCategory  // locked taxonomy — no free-text
+export interface PronoiaRiskFinding {
+  finding_id: string                  // e.g. "P-001"
+  risk_category: PronoiaRiskCategory  // locked taxonomy — no free-text
   finding: string                     // opens with mandatory epistemic marker
   adversarial_angle: string           // how opposing counsel uses this finding
-  verified_claim_ids: string[]        // anchors to Mike's verified_claims
+  verified_claim_ids: string[]        // anchors to Kratos verified_claims
   adjacent_claim_ids: string[]        // contextual only — never verified facts
 }
 
-export interface KatrinaAdversarialEntry {
+export interface PronoiaAdversarialEntry {
   vulnerability: string
   opposing_argument: string
   leverage_holder: 'client' | 'developer' | 'neither' | 'disputed'
   verified_claim_ids: string[]
 }
 
-export interface KatrinaDraftingGap {
+export interface PronoiaDraftingGap {
   gap_id: string                      // e.g. "G-001"
   absent_provision: string            // exact name of missing clause
   consequence: string                 // specific legal/commercial consequence
-  verified_basis: string              // which Mike claim establishes absence
+  verified_basis: string              // which Kratos claim establishes absence
   adversarial_consequence: string     // how gap would be exploited in dispute
 }
 
-export interface KatrinaAnalyticalBrief {
-  epistemic_baseline: string          // declared before any analysis — Harvey reads first
-  risk_findings: KatrinaRiskFinding[]
-  adversarial_exploitation_matrix: KatrinaAdversarialEntry[]
-  drafting_gaps: KatrinaDraftingGap[]
-  structural_summary: string          // Harvey's opening — 2-4 sentences
+export interface PronoiaAnalyticalBrief {
+  epistemic_baseline: string          // declared before any analysis — Logos reads first
+  risk_findings: PronoiaRiskFinding[]
+  adversarial_exploitation_matrix: PronoiaAdversarialEntry[]
+  drafting_gaps: PronoiaDraftingGap[]
+  structural_summary: string          // Logos opening — 2-4 sentences
 }
 
 // Active output
-export interface KatrinaOutputActive {
+export interface PronoiaOutputActive {
   activation_status: 'active'
-  analytical_brief: KatrinaAnalyticalBrief
+  analytical_brief: PronoiaAnalyticalBrief
 }
 
 // Silent output — correct and valid
-export interface KatrinaOutputSilent {
+export interface PronoiaOutputSilent {
   activation_status: 'silent'
   reason: string                      // one line — why activation not required
 }
 
 // Discriminated union
-export type KatrinaOutput = KatrinaOutputActive | KatrinaOutputSilent
+export type PronoiaOutput = PronoiaOutputActive | PronoiaOutputSilent
 
 // ----------------------------------------------------------------------------
-// HARVEY SPECTER — SYNTHESIS & VERDICT
+// LOGOS — SYNTHESIS & VERDICT
 // Stage 4. GPT-5.1 via Azure AI Foundry.
 // The only voice the user sees. Synthesizes from pipeline only.
 // ----------------------------------------------------------------------------
 
-export interface HarveyOutput {
+export interface LogosOutput {
   epistemic_category: EpistemicCategory
   answer: string                      // calibrated to category — inline citations
   closing_statement: string           // one sentence — category-appropriate
@@ -675,27 +675,27 @@ export interface HarveyOutput {
 
 // ----------------------------------------------------------------------------
 // PIPELINE RESULT — COMPLETE ORCHESTRATOR OUTPUT
-// Carries all four character outputs for chain of custody log.
+// Carries all four agent outputs for chain of custody log.
 // ----------------------------------------------------------------------------
 
 export interface PipelineResult {
   // Final output
-  harvey: HarveyOutput
+  logos: LogosOutput
 
-  // Audit trail — all four character outputs preserved
-  rachel: RachelOutput
-  mike: MikeOutput
-  katrina: KatrinaOutput
+  // Audit trail — all four agent outputs preserved
+  aletheia: AletheiaOutput
+  kratos: KratosOutput
+  pronoia: PronoiaOutput
 
   // Pipeline metadata
   query: string
   document_id: string
   retry_attempted: boolean
   total_time_ms: number
-  tokens_per_character: {
-    rachel: { input: number; output: number }
-    mike: { input: number; output: number }
-    katrina: { input: number; output: number }
-    harvey: { input: number; output: number }
+  tokens_per_agent: {
+    aletheia: { input: number; output: number }
+    kratos: { input: number; output: number }
+    pronoia: { input: number; output: number }
+    logos: { input: number; output: number }
   }
 }
