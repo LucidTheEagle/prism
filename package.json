@@ -10,6 +10,8 @@
     "analyze": "next experimental-analyze"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.89.0",
+    "@google/generative-ai": "^0.24.1",
     "@langchain/openai": "^1.2.5",
     "@langchain/textsplitters": "^1.0.1",
     "@supabase/ssr": "^0.8.0",
