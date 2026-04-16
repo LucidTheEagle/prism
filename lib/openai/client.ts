@@ -90,6 +90,11 @@ export const MODELS = {
   // Logos — Azure deployment name (GPT-5.1 via Azure AI Foundry)
   LOGOS: process.env.AZURE_DEPLOYMENT_NAME as string,
 
+  // Backward compatibility alias — files not yet migrated to pipeline still reference GPT4O
+  // Removed when answer-generation.ts, self-critique.ts, metadata-enrichment.ts,
+  // query-analysis.ts, reranking.ts, and documentAnalyzer.ts are replaced in Sub-sprints 1.10+
+  GPT4O: process.env.AZURE_DEPLOYMENT_NAME as string,
+
   // Kratos — Claude Haiku 4.5
   KRATOS: 'claude-haiku-4-5-20251001',
 
