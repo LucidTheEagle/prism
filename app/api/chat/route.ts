@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
 import { analyzeQuery } from '@/lib/ai/query-analysis'
-import { deduplicateResults, bm25Search, vectorSearch, generateQueryEmbedding, reciprocalRankFusion } from '@/lib/ai/hybrid-search'
-import { rerankSearchResults } from '@/lib/ai/reranking'
-import { generateMultiPassAnswer } from '@/lib/ai/answer-generation'
+import { generateAnswer } from '@/lib/ai/answer-generation'
 import { getSubscription } from '@/lib/billing/getSubscription'
 import { checkQueryAccess } from '@/lib/billing/checkAccess'
 import { trackQuery } from '@/lib/billing/trackUsage'
@@ -53,135 +51,136 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`\n${'='.repeat(80)}`)
+    if (!documentId || typeof documentId !== 'string') {
+      return NextResponse.json(
+        { error: 'documentId is required for pipeline queries' },
+        { status: 400 }
+      )
+    }
 
+    console.log(`\n${'='.repeat(80)}`)
     console.log(`User: ${user.id} | Tier: ${subscription.tier}`)
     console.log(`Query: "${query}"`)
-    console.log(`Document ID: ${documentId || 'all user documents'}`)
+    console.log(`Document ID: ${documentId}`)
     console.log(`Timestamp: ${new Date().toISOString()}`)
     console.log(`${'='.repeat(80)}\n`)
 
-    // ── 4. Fetch and verify document ownership ────────────────────
-    let documentContext
-    if (documentId) {
-      const { data: document, error } = await supabaseAdmin
-        .from('documents')
-        .select('document_type, complexity_score, key_entities, name, user_id')
-        .eq('id', documentId)
-        .eq('status', 'ready')
-        .single()
+    // ── 4. Fetch document — ownership + full text ─────────────────
+    const { data: document, error: docError } = await supabaseAdmin
+      .from('documents')
+      .select('document_type, complexity_score, key_entities, name, user_id, file_url')
+      .eq('id', documentId)
+      .eq('status', 'ready')
+      .single()
 
-      if (error || !document) {
-        return NextResponse.json(
-          { error: 'Document not found or not ready' },
-          { status: 404 }
-        )
-      }
-
-      if (document.user_id !== user.id) {
-        return NextResponse.json(
-          { error: 'Document not found' },
-          { status: 404 }
-        )
-      }
-
-      documentContext = {
-        document_type: document.document_type || undefined,
-        complexity_score: document.complexity_score || undefined,
-        key_entities: document.key_entities || undefined,
-      }
-
-      console.log(`[Context] Document: ${document.name}`)
+    if (docError || !document) {
+      return NextResponse.json(
+        { error: 'Document not found or not ready' },
+        { status: 404 }
+      )
     }
 
-    // ── 5. Query Analysis ─────────────────────────────────────────
-    console.log('[Step 1/5] Analyzing query...')
+    if (document.user_id !== user.id) {
+      return NextResponse.json(
+        { error: 'Document not found' },
+        { status: 404 }
+      )
+    }
+
+    console.log(`[Context] Document: ${document.name}`)
+
+    // ── 5. Fetch full document text from Supabase Storage ─────────
+    // Required by Aletheia — full document text, not pre-chunked results
+    console.log('[Step 1/3] Fetching document text...')
+    let documentText: string
+
+    try {
+      // Extract storage path from file_url
+      // file_url format: https://<project>.supabase.co/storage/v1/object/public/<bucket>/<path>
+      const fileUrl = document.file_url as string
+      const storagePathMatch = fileUrl.match(/\/storage\/v1\/object\/(?:public|authenticated)\/(.+)/)
+
+      if (!storagePathMatch) {
+        throw new Error(`Cannot parse storage path from file_url: ${fileUrl}`)
+      }
+
+      const storagePath = storagePathMatch[1]
+      // storagePath is now "bucket-name/path/to/file"
+      const bucketEnd = storagePath.indexOf('/')
+      const bucket = storagePath.slice(0, bucketEnd)
+      const filePath = storagePath.slice(bucketEnd + 1)
+
+      const { data: fileData, error: storageError } = await supabaseAdmin
+        .storage
+        .from(bucket)
+        .download(filePath)
+
+      if (storageError || !fileData) {
+        throw new Error(`Storage download failed: ${storageError?.message}`)
+      }
+
+      documentText = await fileData.text()
+      console.log(`✓ Document text fetched — ${documentText.length} characters`)
+    } catch (error) {
+      console.error('[Chat] Document text fetch failed:', error)
+      return NextResponse.json(
+        { error: 'Failed to load document content for analysis' },
+        { status: 500 }
+      )
+    }
+
+    // ── 6. Query Analysis ─────────────────────────────────────────
+    // Stays in the route — orchestrator does not call analyzeQuery
+    console.log('[Step 2/3] Analyzing query...')
+    const documentContext = {
+      document_type: document.document_type || undefined,
+      complexity_score: document.complexity_score || undefined,
+      key_entities: document.key_entities || undefined,
+    }
     const analysis = await analyzeQuery(query, documentContext)
-    const originalThreshold = analysis.confidence_threshold
-    analysis.confidence_threshold = Math.min(analysis.confidence_threshold, 0.3)
-    console.log(`[Threshold] Clamped ${originalThreshold} → ${analysis.confidence_threshold}`)
     console.log(`✓ Query type: ${analysis.query_type}`)
 
-    // ── 6. Hybrid Search ──────────────────────────────────────────
-    console.log('\n[Step 2/5] Performing hybrid search...')
-    const bm25Query = analysis.key_terms.length > 0
-      ? analysis.key_terms.join(' ')
-      : query
-
-    console.log(`[BM25] Using key terms: "${bm25Query}"`)
-
-    const [queryEmbedding, bm25Results] = await Promise.all([
-      generateQueryEmbedding(query),
-      bm25Search(bm25Query, documentId || null, analysis.chunk_count * 2, user.id),
-    ])
-
-    const vectorResults = await vectorSearch(
-      queryEmbedding,
-      documentId || null,
-      analysis.chunk_count * 2,
-      analysis.confidence_threshold,
+    // ── 7. Run pipeline ───────────────────────────────────────────
+    console.log('[Step 3/3] Running PRISM pipeline...')
+    const pipelineResult = await generateAnswer(
+      query,
+      documentText,
+      documentId,
       user.id
     )
+    console.log(`✓ Pipeline complete | category: ${pipelineResult.logos.epistemic_category}`)
 
-    console.log(`[Vector] ${vectorResults.length} results, [BM25] ${bm25Results.length} results`)
+    // ── 8. Track usage (non-blocking) ────────────────────────────
+    const totalTokensInput = Object.values(pipelineResult.tokens_per_agent)
+      .reduce((sum, agent) => sum + agent.input, 0)
+    const totalTokensOutput = Object.values(pipelineResult.tokens_per_agent)
+      .reduce((sum, agent) => sum + agent.output, 0)
 
-    const fused = reciprocalRankFusion(
-      vectorResults,
-      bm25Results,
-      analysis.vector_weight,
-      analysis.bm25_weight
-    )
-
-    let searchResults = deduplicateResults(fused.slice(0, analysis.chunk_count))
-    console.log(`✓ ${searchResults.length} unique results`)
-
-    if (searchResults.length === 0) {
-      return NextResponse.json({
-        success: true,
-        query,
-        answer: "I couldn't find any relevant information in the document to answer this question.",
-        confidence_score: 0,
-        citations: [],
-        message: 'No search results found',
-      })
-    }
-
-    // ── 7. Re-ranking ─────────────────────────────────────────────
-    console.log('\n[Step 3/5] Re-ranking results...')
-    const rerankingResult = await rerankSearchResults(query, searchResults, 10)
-    searchResults = rerankingResult.reranked_results
-    console.log(`✓ Re-ranking complete`)
-
-    // ── 8. Multi-Pass Answer Generation ──────────────────────────
-    console.log('\n[Step 4/5] Generating answer (multi-pass)...')
-    const multiPassResult = await generateMultiPassAnswer(
-      query,
-      searchResults.slice(0, 5)
-    )
-    console.log(`✓ Answer generated (${multiPassResult.total_passes} passes)`)
-
-    // ── 9. Track usage (non-blocking) ────────────────────────────
     trackQuery({
       userId: user.id,
       subscription,
-      tokensInput: multiPassResult.tokens_input,
-      tokensOutput: multiPassResult.tokens_output,
+      tokensInput: totalTokensInput,
+      tokensOutput: totalTokensOutput,
     }).catch((err) => console.error('[Chat] Usage tracking failed:', err))
 
-    // ── 9b. Audit log ─────────────────────────────────────────────
+    // ── 9. Audit log ──────────────────────────────────────────────
     logAudit({
       userId: user.id,
       documentId: documentId ?? null,
       eventType: 'document_query',
       queryText: query,
-      responseConfidence: multiPassResult.final_answer.confidence_score,
-      chunksAccessed: searchResults.length,
+      responseConfidence: null,           // float replaced by epistemic_category
+      chunksAccessed: pipelineResult.aletheia.claims.length,
       durationMs: Date.now() - startTime,
       metadata: {
         query_type: analysis.query_type,
         tier: subscription.tier,
-        was_revised: multiPassResult.was_revised,
-        sources_used: multiPassResult.final_answer.sources_used,
+        epistemic_category: pipelineResult.logos.epistemic_category,
+        retry_attempted: pipelineResult.retry_attempted,
+        claims_verified: pipelineResult.kratos.claims_verified,
+        claims_blocked: pipelineResult.kratos.claims_blocked,
+        pronoia_activated: pipelineResult.pronoia.activation_status === 'active',
+        tokens_per_agent: pipelineResult.tokens_per_agent,
       },
       request,
     }).catch(() => null)
@@ -191,7 +190,7 @@ export async function POST(request: NextRequest) {
       .from('chat_messages')
       .insert([
         {
-          document_id: documentId || null,
+          document_id: documentId,
           user_id: user.id,
           role: 'user',
           content: query,
@@ -199,12 +198,12 @@ export async function POST(request: NextRequest) {
           citations: null,
         },
         {
-          document_id: documentId || null,
+          document_id: documentId,
           user_id: user.id,
           role: 'assistant',
-          content: multiPassResult.final_answer.answer,
-          confidence: multiPassResult.final_answer.confidence_score,
-          citations: multiPassResult.final_answer.citations,
+          content: pipelineResult.logos.answer,
+          confidence: null,                // float replaced by epistemic_category
+          citations: pipelineResult.citations,
         },
       ])
 
@@ -212,27 +211,44 @@ export async function POST(request: NextRequest) {
       console.error('[Chat] Failed to persist message:', msgError.message)
     }
 
-    // ── 11. Build response ────────────────────────────────────────
+    // ── 11. Store pipeline audit for chain of custody ─────────────
+    // Data captured now — exportable signed format is V1.1 feature
+    // pipeline_audit stored in metadata for future audit log export
+    const pipelineAudit = {
+      aletheia: pipelineResult.aletheia,
+      kratos: pipelineResult.kratos,
+      pronoia: pipelineResult.pronoia,
+      tokens_per_agent: pipelineResult.tokens_per_agent,
+      retry_attempted: pipelineResult.retry_attempted,
+      total_time_ms: pipelineResult.total_time_ms,
+    }
+
+    // ── 12. Build response ────────────────────────────────────────
     const totalDuration = Date.now() - startTime
-    const totalCost = rerankingResult.cost_estimate + multiPassResult.cost_estimate
 
     return NextResponse.json({
       success: true,
       query,
-      answer: multiPassResult.final_answer.answer,
-      confidence_score: multiPassResult.final_answer.confidence_score,
-      citations: multiPassResult.final_answer.citations,
-      reasoning: multiPassResult.final_answer.reasoning,
+      // Core answer fields — frontend contract
+      answer: pipelineResult.logos.answer,
+      epistemic_category: pipelineResult.logos.epistemic_category,
+      closing_statement: pipelineResult.logos.closing_statement,
+      citations: pipelineResult.citations,
+      // Metadata — extended, not replaced
       metadata: {
         query_type: analysis.query_type,
-        sources_searched: searchResults.length,
-        sources_used: multiPassResult.final_answer.sources_used,
-        was_revised: multiPassResult.was_revised,
-        total_passes: multiPassResult.total_passes,
+        epistemic_category: pipelineResult.logos.epistemic_category,
+        claims_verified: pipelineResult.kratos.claims_verified,
+        claims_blocked: pipelineResult.kratos.claims_blocked,
+        pronoia_activated: pipelineResult.pronoia.activation_status === 'active',
+        retry_attempted: pipelineResult.retry_attempted,
         processing_time_ms: totalDuration,
-        cost_estimate: totalCost,
+        tokens_per_agent: pipelineResult.tokens_per_agent,
       },
+      // Pipeline audit — chain of custody data
+      pipeline_audit: pipelineAudit,
     })
+
   } catch (error: unknown) {
     const duration = Date.now() - startTime
     const message = error instanceof Error ? error.message : 'Unknown error'
