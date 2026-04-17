@@ -698,4 +698,5 @@ export interface PipelineResult {
     pronoia: { input: number; output: number }
     logos: { input: number; output: number }
   }
+  citations: Citation[]
 }
