@@ -18,6 +18,15 @@ const badgeVariants = cva(
           "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
         ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
         link: "text-primary underline-offset-4 [a&]:hover:underline",
+        // ── Epistemic category badges — PRISM V1 ──────────────────
+        // Replaces percentage confidence display throughout the UI.
+        // Three states: verified, inferred, silent.
+        "epistemic-green":
+          "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 font-semibold tracking-wide",
+        "epistemic-yellow":
+          "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 font-semibold tracking-wide",
+        "epistemic-red":
+          "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800 font-semibold tracking-wide",
       },
     },
     defaultVariants: {
