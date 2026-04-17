@@ -6,26 +6,10 @@ import { ChatHeader } from './chat/ChatHeader'
 import { ChatMessages } from './chat/ChatMessages'
 import { ChatInput } from './chat/ChatInput'
 import { UpgradeModal } from './UpgradeModal'
+import type { ChatMessage, Citation, EpistemicCategory } from '@/lib/types'
 
-// ── Types (shared across subcomponents via re-export) ──────────────────────
-export interface Citation {
-  chunk_id: string
-  document_id: string
-  text: string
-  page: number
-  relevance: number
-  ai_summary?: string
-  chunk_index: number
-}
-
-export interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  confidence?: number
-  citations?: Citation[]
-  timestamp: Date
-}
+// Re-export for subcomponents — single source of truth
+export type { ChatMessage, Citation }
 
 interface Document {
   id: string
@@ -63,7 +47,7 @@ export default function ChatInterface({
   const [docsError, setDocsError] = useState<string | null>(null)
 
   // Message state
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(true)
@@ -85,10 +69,9 @@ export default function ChatInterface({
 
   const [userEmail, setUserEmail] = useState<string>('')
   const [userName, setUserName] = useState<string>('')
-  
+
   useEffect(() => {
     setMounted(true)
-    // Fetch user info for avatar
     import('@/lib/supabase/client').then(({ createClient }) => {
       const supabase = createClient()
       supabase.auth.getUser().then(({ data: { user } }) => {
@@ -111,7 +94,10 @@ export default function ChatInterface({
     setDocsError(null)
     try {
       const response = await fetch('/api/documents')
-      if (response.status === 401) { setDocsError('Session expired. Please sign in again.'); return }
+      if (response.status === 401) {
+        setDocsError('Session expired. Please sign in again.')
+        return
+      }
       if (!response.ok) throw new Error(`Failed to fetch documents (${response.status})`)
       const data = await response.json()
       setAllDocuments((data.documents || []).filter((d: Document) => d.status === 'ready'))
@@ -154,16 +140,30 @@ export default function ChatInterface({
       setHistoryError(null)
       try {
         const response = await fetch(`/api/chat/${activeDocumentId}/messages`)
-        if (response.status === 401) { setHistoryError('Session expired. Please sign in again.'); return }
+        if (response.status === 401) {
+          setHistoryError('Session expired. Please sign in again.')
+          return
+        }
         if (!response.ok) throw new Error(`Failed to load history (${response.status})`)
         const data = await response.json()
         if (data.messages?.length > 0) {
           setMessages(data.messages.map((row: {
-            id: string; role: 'user' | 'assistant'; content: string
-            confidence?: number; citations?: Citation[]; created_at: string
+            id: string
+            role: 'user' | 'assistant'
+            content: string
+            // Handle both old float confidence rows and new epistemic_category rows
+            confidence?: number | null
+            epistemic_category?: EpistemicCategory | null
+            closing_statement?: string | null
+            citations?: Citation[] | null
+            created_at: string
           }) => ({
-            id: row.id, role: row.role, content: row.content,
-            confidence: row.confidence ?? undefined,
+            id: row.id,
+            role: row.role,
+            content: row.content,
+            // Graceful transition — old rows have confidence float, new rows have epistemic_category
+            epistemic_category: row.epistemic_category ?? undefined,
+            closing_statement: row.closing_statement ?? undefined,
             citations: row.citations ?? undefined,
             timestamp: new Date(row.created_at),
           })))
@@ -171,7 +171,9 @@ export default function ChatInterface({
           setMessages([])
         }
       } catch (err) {
-        setHistoryError(err instanceof Error ? err.message : 'Failed to load conversation history')
+        setHistoryError(
+          err instanceof Error ? err.message : 'Failed to load conversation history'
+        )
       } finally {
         setHistoryLoading(false)
       }
@@ -180,19 +182,23 @@ export default function ChatInterface({
   }, [activeDocumentId])
 
   // ── Persist message (fire-and-forget) ───────────────────────────────────
-  const persistMessage = async (message: Message) => {
+  const persistMessage = async (message: ChatMessage) => {
     if (!activeDocumentId) return
     try {
       await fetch(`/api/chat/${activeDocumentId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          role: message.role, content: message.content,
-          confidence: message.confidence ?? null,
+          role: message.role,
+          content: message.content,
+          epistemic_category: message.epistemic_category ?? null,
+          closing_statement: message.closing_statement ?? null,
           citations: message.citations ?? null,
         }),
       })
-    } catch { console.warn('[ChatInterface] Failed to persist message') }
+    } catch {
+      console.warn('[ChatInterface] Failed to persist message')
+    }
   }
 
   // ── Submit ───────────────────────────────────────────────────────────────
@@ -201,9 +207,11 @@ export default function ChatInterface({
     if (!input.trim() || isLoading) return
     setSubmitError(null)
 
-    const userMessage: Message = {
-      id: Date.now().toString(), role: 'user',
-      content: input.trim(), timestamp: new Date(),
+    const userMessage: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: input.trim(),
+      timestamp: new Date(),
     }
     setMessages(prev => [...prev, userMessage])
     persistMessage(userMessage)
@@ -214,7 +222,10 @@ export default function ChatInterface({
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: userMessage.content, documentId: activeDocumentId || undefined }),
+        body: JSON.stringify({
+          query: userMessage.content,
+          documentId: activeDocumentId || undefined,
+        }),
       })
 
       if (response.status === 401) {
@@ -232,7 +243,6 @@ export default function ChatInterface({
             limit: errData.limit,
             current: errData.current,
           })
-          // Remove the optimistic user message — query was never processed
           setMessages(prev => prev.filter(m => m.id !== userMessage.id))
           return
         }
@@ -246,10 +256,14 @@ export default function ChatInterface({
 
       const data = await response.json()
       if (data.success) {
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(), role: 'assistant',
-          content: data.answer, confidence: data.confidence_score,
-          citations: data.citations, timestamp: new Date(),
+        const assistantMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: data.answer,
+          epistemic_category: data.epistemic_category ?? undefined,
+          closing_statement: data.closing_statement ?? undefined,
+          citations: data.citations ?? undefined,
+          timestamp: new Date(),
         }
         setMessages(prev => [...prev, assistantMessage])
         persistMessage(assistantMessage)
@@ -264,17 +278,24 @@ export default function ChatInterface({
         const retryResponse = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: userMessage.content, documentId: activeDocumentId || undefined }),
+          body: JSON.stringify({
+            query: userMessage.content,
+            documentId: activeDocumentId || undefined,
+          }),
         })
 
         if (!retryResponse.ok) throw new Error('Retry failed')
 
         const retryData = await retryResponse.json()
         if (retryData.success) {
-          const assistantMessage: Message = {
-            id: (Date.now() + 1).toString(), role: 'assistant',
-            content: retryData.answer, confidence: retryData.confidence_score,
-            citations: retryData.citations, timestamp: new Date(),
+          const assistantMessage: ChatMessage = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: retryData.answer,
+            epistemic_category: retryData.epistemic_category ?? undefined,
+            closing_statement: retryData.closing_statement ?? undefined,
+            citations: retryData.citations ?? undefined,
+            timestamp: new Date(),
           }
           setMessages(prev => [...prev, assistantMessage])
           persistMessage(assistantMessage)
@@ -285,7 +306,8 @@ export default function ChatInterface({
       } catch {
         setSubmitError(null)
         setMessages(prev => [...prev, {
-          id: (Date.now() + 1).toString(), role: 'assistant',
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
           content: 'Unable to process your request. Please try again in a moment.',
           timestamp: new Date(),
         }])
@@ -298,7 +320,6 @@ export default function ChatInterface({
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-white dark:bg-slate-900">
-
       <ChatHeader
         activeDocumentId={activeDocumentId}
         activeDocumentName={activeDocumentName}
@@ -352,7 +373,6 @@ export default function ChatInterface({
           window.location.href = '/billing'
         }}
       />
-
     </div>
   )
 }

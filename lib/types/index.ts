@@ -131,17 +131,17 @@ export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
-  
-  // AI Response Metadata
-  confidence_score?: number
+
+  // V1 Pipeline fields — replaces confidence_score float
+  epistemic_category?: EpistemicCategory
+  closing_statement?: string
   citations?: Citation[]
-  reasoning?: string
-  was_revised?: boolean // After self-critique
-  
-  // Multi-pass tracking
-  generation_pass?: number // 1, 2, or 3
+
+  // Pipeline audit metadata — preserved for chain of custody
+  was_revised?: boolean
+  generation_pass?: number
   critique_notes?: string
-  
+
   timestamp: Date
   isStreaming?: boolean
 }
