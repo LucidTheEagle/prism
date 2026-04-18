@@ -2,9 +2,14 @@
 
 import { useRef, useEffect, useState } from 'react'
 import {
-  AlertCircle, Sparkles, CheckCircle2, RefreshCw,
+  AlertCircle, CheckCircle2, RefreshCw, XCircle,
 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { CitationCard } from './CitationCard'
+import { getEpistemicConfig } from '@/lib/utils/trustScore'
+import type { ChatMessage, EpistemicCategory } from '@/lib/types'
+
+// ── Citation deduplication ─────────────────────────────────────────────────
 
 interface Citation {
   chunk_id: string
@@ -14,15 +19,7 @@ interface Citation {
   relevance: number
   ai_summary?: string
   chunk_index: number
-}
-
-interface Message {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  confidence?: number
-  citations?: Citation[]
-  timestamp: Date
+  section_reference?: string
 }
 
 function normalizeCitationText(text: string) {
@@ -50,7 +47,6 @@ function dedupeAndRankCitations(citations: Citation[]) {
       byKey.set(key, citation)
       return
     }
-
     const currentScore = citation.relevance + (citation.ai_summary ? 0.01 : 0)
     const existingScore = existing.relevance + (existing.ai_summary ? 0.01 : 0)
     if (currentScore > existingScore) byKey.set(key, citation)
@@ -63,13 +59,45 @@ function dedupeAndRankCitations(citations: Citation[]) {
   })
 }
 
+// ── Epistemic badge ────────────────────────────────────────────────────────
+
+function EpistemicBadge({ category }: { category: EpistemicCategory }) {
+  const config = getEpistemicConfig(category)
+
+  const Icon =
+    category === 'EXPLICITLY_STATED'
+      ? CheckCircle2
+      : category === 'INFERRED'
+      ? AlertCircle
+      : XCircle
+
+  return (
+    <div
+      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border ${config.bgClass} ${config.borderClass} mb-3`}
+      aria-label={`Epistemic category: ${config.label}`}
+      title={config.description}
+    >
+      <Icon className={`w-3.5 h-3.5 shrink-0 ${config.textClass}`} aria-hidden="true" />
+      <Badge variant={config.badgeVariant} className="text-[10px] uppercase tracking-wider px-1.5 py-0">
+        {config.label}
+      </Badge>
+      <span className={`text-[10px] ${config.textClass} hidden sm:inline`}>
+        {config.sublabel}
+      </span>
+    </div>
+  )
+}
+
 // ── Glass Box inference stages ─────────────────────────────────────────────
+// Updated to reflect four-character pipeline progression
+// Character names are not exposed to the user — stages are user-facing language
+
 const INFERENCE_STAGES = [
   'Scanning document structure…',
   'Extracting relevant clauses…',
-  'Cross-referencing citations…',
-  'Verifying answer against source…',
-  'Generating forensic citations…',
+  'Verifying claims against source…',
+  'Running legal risk analysis…',
+  'Assembling verified answer…',
 ]
 
 function GlassBoxIndicator() {
@@ -82,7 +110,7 @@ function GlassBoxIndicator() {
         clearInterval(interval)
         return prev
       })
-    }, 6000) // advance every 6 seconds across ~30s total
+    }, 6000)
     return () => clearInterval(interval)
   }, [])
 
@@ -91,7 +119,7 @@ function GlassBoxIndicator() {
       className="flex justify-start"
       role="status"
       aria-live="polite"
-      aria-label="PRISM AI is processing your request"
+      aria-label="PRISM is processing your request"
     >
       <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-bl-md shadow-sm border border-slate-200 dark:border-slate-700 px-4 sm:px-5 py-3 sm:py-4 max-w-xs">
         <div className="space-y-2">
@@ -140,8 +168,31 @@ function GlassBoxIndicator() {
   )
 }
 
+// ── Suggested questions ────────────────────────────────────────────────────
+
+const SUGGESTED_QUESTIONS = [
+  {
+    q: 'What are the key obligations of each party?',
+    sub: 'Identify who is responsible for what',
+  },
+  {
+    q: 'Are there any clauses that create risk or liability?',
+    sub: 'Surface hidden exposure before signing',
+  },
+  {
+    q: 'What happens if either party breaches this agreement?',
+    sub: 'Understand the consequences of non-performance',
+  },
+  {
+    q: 'Does this document contain a governing law clause?',
+    sub: 'Confirm jurisdiction for any disputes',
+  },
+]
+
+// ── ChatMessages props ─────────────────────────────────────────────────────
+
 interface ChatMessagesProps {
-  messages: Message[]
+  messages: ChatMessage[]
   isLoading: boolean
   historyLoading: boolean
   historyError: string | null
@@ -149,6 +200,8 @@ interface ChatMessagesProps {
   onSuggestedQuestion: (q: string) => void
   onHistoryRetry: () => void
 }
+
+// ── ChatMessages ───────────────────────────────────────────────────────────
 
 export function ChatMessages({
   messages,
@@ -175,6 +228,7 @@ export function ChatMessages({
     >
       <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
 
+        {/* History loading */}
         {historyLoading && (
           <div
             className="flex items-center justify-center py-12"
@@ -192,13 +246,17 @@ export function ChatMessages({
           </div>
         )}
 
+        {/* History error */}
         {!historyLoading && historyError && (
           <div
             className="flex flex-col items-center justify-center py-12 text-center"
             role="alert"
             aria-live="assertive"
           >
-            <div className="w-12 h-12 bg-amber-100 dark:bg-amber-950/40 rounded-full flex items-center justify-center mb-3" aria-hidden="true">
+            <div
+              className="w-12 h-12 bg-amber-100 dark:bg-amber-950/40 rounded-full flex items-center justify-center mb-3"
+              aria-hidden="true"
+            >
               <AlertCircle className="w-6 h-6 text-amber-600 dark:text-amber-400" aria-hidden="true" />
             </div>
             <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -218,25 +276,29 @@ export function ChatMessages({
           </div>
         )}
 
+        {/* Empty state — suggested questions */}
         {!historyLoading && !historyError && messages.length === 0 && (
-          <section aria-label="Getting started suggestions" className="text-center py-8 sm:py-12">
+          <section
+            aria-label="Getting started suggestions"
+            className="text-center py-8 sm:py-12"
+          >
             <div
               className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-emerald-100 to-emerald-200 dark:from-emerald-900/40 dark:to-emerald-800/40 rounded-full mb-4 sm:mb-6"
               aria-hidden="true"
             >
-              <Sparkles className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+              <CheckCircle2 className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
             </div>
             <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-50 mb-2">
               Ask anything about your document
             </h2>
             <p className="text-slate-600 dark:text-slate-400 max-w-sm mx-auto mb-6 sm:mb-8 text-sm">
-              Get instant answers with citations and confidence scores
+              Every answer verified against the source. Every claim traced to an exact location.
             </p>
-            <ul className="grid gap-3 text-left list-none" aria-label="Suggested questions">
-              {[
-                { q: 'What are the key terms of this document?', sub: 'Overview of important sections' },
-                { q: 'Summarize the main points', sub: 'Quick overview of the document' },
-              ].map(({ q, sub }) => (
+            <ul
+              className="grid gap-3 text-left list-none"
+              aria-label="Suggested questions"
+            >
+              {SUGGESTED_QUESTIONS.map(({ q, sub }) => (
                 <li key={q}>
                   <button
                     onClick={() => onSuggestedQuestion(q)}
@@ -254,12 +316,13 @@ export function ChatMessages({
           </section>
         )}
 
+        {/* Message list */}
         {!historyLoading && !historyError && (
           <div className="space-y-4 sm:space-y-6">
             {messages.map((message) => (
               <article
                 key={message.id}
-                aria-label={`${message.role === 'user' ? 'You' : 'PRISM AI'}: ${message.content.slice(0, 60)}${message.content.length > 60 ? '…' : ''}`}
+                aria-label={`${message.role === 'user' ? 'You' : 'PRISM'}: ${message.content.slice(0, 60)}${message.content.length > 60 ? '…' : ''}`}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
@@ -270,60 +333,62 @@ export function ChatMessages({
                   } px-4 sm:px-5 py-3 sm:py-4`}
                 >
                   {message.role === 'assistant' ? (
-                    <div className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base text-slate-900 dark:text-slate-100">
-                      {message.content}
+                    <div>
+                      {/* Epistemic badge — above answer, always visible when present */}
+                      {message.epistemic_category && (
+                        <EpistemicBadge category={message.epistemic_category} />
+                      )}
+
+                      {/* Answer body */}
+                      <div className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base text-slate-900 dark:text-slate-100">
+                        {message.content}
+                      </div>
+
+                      {/* Closing statement — Logos one-sentence actionable close */}
+                      {message.closing_statement && (
+                        <div
+                          className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700"
+                          aria-label="Actionable guidance"
+                        >
+                          <p className="text-xs text-slate-500 dark:text-slate-400 italic leading-relaxed">
+                            {message.closing_statement}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Citations */}
+                      {message.citations && message.citations.length > 0 && (() => {
+                        const dedupedCitations = dedupeAndRankCitations(
+                          message.citations as Citation[]
+                        )
+                        return (
+                          <section
+                            className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-600"
+                            aria-label={`${dedupedCitations.length} source${dedupedCitations.length > 1 ? 's' : ''} cited`}
+                          >
+                            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                              Sources:
+                            </p>
+                            <ul className="space-y-2 list-none">
+                              {dedupedCitations.map((citation, idx) => (
+                                <li key={`${citation.chunk_id}-${citation.page}-${citation.chunk_index}`}>
+                                  <CitationCard
+                                    citation={citation}
+                                    index={idx}
+                                    onCitationClick={onCitationClick}
+                                  />
+                                </li>
+                              ))}
+                            </ul>
+                          </section>
+                        )
+                      })()}
                     </div>
                   ) : (
                     <p className="m-0 text-sm sm:text-base">{message.content}</p>
                   )}
 
-                  {message.citations && message.citations.length > 0 && (() => {
-                    const dedupedCitations = dedupeAndRankCitations(message.citations)
-
-                    return (
-                      <section
-                        className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-600"
-                        aria-label={`${dedupedCitations.length} source${dedupedCitations.length > 1 ? 's' : ''} cited`}
-                      >
-                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                          Sources:
-                        </p>
-                        <ul className="space-y-2 list-none">
-                          {dedupedCitations.map((citation, idx) => (
-                            <li key={`${citation.chunk_id}-${citation.page}-${citation.chunk_index}`}>
-                              <CitationCard
-                                citation={citation}
-                                index={idx}
-                                onCitationClick={onCitationClick}
-                              />
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
-                    )
-                  })()}
-
-                  {message.confidence !== undefined && (
-                    <div
-                      className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-600 flex items-center gap-2"
-                      aria-label={`Confidence: ${(message.confidence * 100).toFixed(0)}%`}
-                    >
-                      {message.confidence >= 0.8 ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
-                      ) : (
-                        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" aria-hidden="true" />
-                      )}
-                      <span className="text-xs text-slate-600 dark:text-slate-400">
-                        {message.confidence >= 0.95
-                          ? 'High confidence — strongly supported by the document'
-                          : message.confidence >= 0.7
-                          ? 'Good confidence — well supported with minor uncertainty'
-                          : 'Moderate confidence — verify against the source directly'}{' '}
-                        ({(message.confidence * 100).toFixed(0)}%)
-                      </span>
-                    </div>
-                  )}
-
+                  {/* Timestamp */}
                   <time
                     dateTime={message.timestamp.toISOString()}
                     className="block mt-2 text-xs opacity-60"
