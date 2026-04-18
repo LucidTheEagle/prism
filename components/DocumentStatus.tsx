@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useId } from 'react'
 import { CheckCircle2, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 interface DocumentStatusProps {
   documentId: string
@@ -35,7 +36,6 @@ function sanitiseError(raw: string | null): string {
   if (lower.includes('size') || lower.includes('large')) {
     return 'This document exceeds the processing limit. Please try a smaller file.'
   }
-  // Never expose raw technical errors
   return 'Secure connection interrupted. For your privacy, partial data has been purged. Please try uploading again.'
 }
 
@@ -45,12 +45,23 @@ export function DocumentStatus({
   onFailed,
   autoNavigate = false,
 }: DocumentStatusProps) {
-  const [status, setStatus] = useState<'processing' | 'ready' | 'failed'>('processing')
+  const [status, setStatus] = useState<'queued' | 'processing' | 'ready' | 'failed'>('queued')
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
 
   const progressId = useId()
+
+  const handleReady = useCallback(() => {
+    setStatus('ready')
+    setProgress(100)
+    onReady?.()
+    if (autoNavigate) {
+      setTimeout(() => {
+        window.location.href = `/chat?doc=${documentId}`
+      }, 2000)
+    }
+  }, [onReady, autoNavigate, documentId])
 
   const handleFailure = useCallback((rawError: string | null) => {
     setStatus('failed')
@@ -59,71 +70,95 @@ export function DocumentStatus({
   }, [onFailed])
 
   useEffect(() => {
-    let consecutiveErrors = 0
-    const MAX_CONSECUTIVE_ERRORS = 3
+    const supabase = createClient()
+    let progressInterval: ReturnType<typeof setInterval> | null = null
 
-    const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 95) return 95
-        return prev + 5
-      })
-    }, 2000)
+    // ── Step 1: Fetch current status immediately ───────────────────────────
+    // Handles the case where the document was already processed before
+    // the component mounted — no waiting for the first Realtime event
+    const fetchInitialStatus = async () => {
+      const { data, error: fetchError } = await supabase
+        .from('documents')
+        .select('ingestion_status, ingestion_error')
+        .eq('id', documentId)
+        .single()
 
-    const checkStatus = async () => {
-      try {
-        const response = await fetch(`/api/documents/${documentId}`)
+      if (fetchError || !data) return
 
-        if (response.ok) {
-          consecutiveErrors = 0
-          const data = await response.json()
-
-          if (data.status === 'ready') {
-            clearInterval(progressInterval)
-            clearInterval(pollInterval)
-            setProgress(100)
-            setStatus('ready')
-            onReady?.()
-            if (autoNavigate) {
-              setTimeout(() => {
-                window.location.href = `/chat?doc=${documentId}`
-              }, 2000)
-            }
-          } else if (data.status === 'failed') {
-            clearInterval(progressInterval)
-            clearInterval(pollInterval)
-            handleFailure(data.error_message ?? null)
-          }
-          // status === 'processing' — continue polling
-        } else if (response.status === 401) {
-          clearInterval(progressInterval)
-          clearInterval(pollInterval)
-          handleFailure('Session expired. Please sign in again.')
-        } else {
-          consecutiveErrors++
-          if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-            clearInterval(progressInterval)
-            clearInterval(pollInterval)
-            handleFailure(null)
-          }
-        }
-      } catch {
-        consecutiveErrors++
-        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-          clearInterval(progressInterval)
-          clearInterval(pollInterval)
-          handleFailure(null)
-        }
+      if (data.ingestion_status === 'ready') {
+        handleReady()
+        return
       }
+
+      if (data.ingestion_status === 'failed') {
+        handleFailure(data.ingestion_error ?? null)
+        return
+      }
+
+      // queued or processing — start progress animation and subscribe
+      setStatus(data.ingestion_status as 'queued' | 'processing')
+      startProgressAnimation()
     }
 
-    const pollInterval = setInterval(checkStatus, 3000)
-    checkStatus()
+    // ── Step 2: Progress animation ─────────────────────────────────────────
+    // Visual feedback while pipeline runs — advances to 95% max
+    // Resets when status transitions to ready or failed
+    const startProgressAnimation = () => {
+      if (progressInterval) clearInterval(progressInterval)
+      progressInterval = setInterval(() => {
+        setProgress(prev => {
+          if (prev >= 95) return 95
+          return prev + 5
+        })
+      }, 2000)
+    }
+
+    // ── Step 3: Supabase Realtime subscription ─────────────────────────────
+    // Subscribes to changes on this specific document row
+    // Receives ingestion_status transitions pushed by runIngestionPipeline
+    const channel = supabase
+      .channel(`document-status-${documentId}-${retryCount}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'documents',
+          filter: `id=eq.${documentId}`,
+        },
+        (payload) => {
+          const newStatus = payload.new.ingestion_status as string
+          const newError = payload.new.ingestion_error as string | null
+
+          console.log(`[DocumentStatus] Realtime update — ingestion_status: ${newStatus}`)
+
+          if (newStatus === 'processing') {
+            setStatus('processing')
+            return
+          }
+
+          if (newStatus === 'ready') {
+            if (progressInterval) clearInterval(progressInterval)
+            handleReady()
+            return
+          }
+
+          if (newStatus === 'failed') {
+            if (progressInterval) clearInterval(progressInterval)
+            handleFailure(newError ?? null)
+            return
+          }
+        }
+      )
+      .subscribe()
+
+    fetchInitialStatus()
 
     return () => {
-      clearInterval(progressInterval)
-      clearInterval(pollInterval)
+      if (progressInterval) clearInterval(progressInterval)
+      supabase.removeChannel(channel)
     }
-  }, [documentId, onReady, autoNavigate, handleFailure, retryCount])
+  }, [documentId, retryCount, handleReady, handleFailure])
 
   // ── Failed state ───────────────────────────────────────────────────────────
   if (status === 'failed') {
@@ -150,7 +185,7 @@ export function DocumentStatus({
         </div>
         <button
           onClick={() => {
-            setStatus('processing')
+            setStatus('queued')
             setProgress(0)
             setError(null)
             setRetryCount(c => c + 1)
@@ -190,7 +225,10 @@ export function DocumentStatus({
             <span id={progressId} className="text-slate-700 dark:text-slate-300 font-medium">
               Progress
             </span>
-            <span className="text-emerald-600 dark:text-emerald-400 font-bold" aria-hidden="true">
+            <span
+              className="text-emerald-600 dark:text-emerald-400 font-bold"
+              aria-hidden="true"
+            >
               100%
             </span>
           </div>
@@ -222,6 +260,36 @@ export function DocumentStatus({
     )
   }
 
+  // ── Queued state ───────────────────────────────────────────────────────────
+  if (status === 'queued') {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        aria-label="Document is queued for processing"
+        className="space-y-4"
+      >
+        <div className="flex items-center gap-3">
+          <Loader2
+            className="w-5 h-5 text-slate-400 dark:text-slate-500 animate-spin shrink-0"
+            aria-hidden="true"
+          />
+          <p className="font-semibold text-slate-700 dark:text-slate-300">
+            Preparing your document…
+          </p>
+        </div>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Processing will begin shortly.
+        </p>
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            AES-256 encrypted · Only you can access this document · Never used for AI training
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   // ── Processing state ───────────────────────────────────────────────────────
   return (
     <div
@@ -245,7 +313,10 @@ export function DocumentStatus({
           <span id={progressId} className="text-slate-700 dark:text-slate-300 font-medium">
             Progress
           </span>
-          <span className="text-emerald-600 dark:text-emerald-400 font-bold" aria-hidden="true">
+          <span
+            className="text-emerald-600 dark:text-emerald-400 font-bold"
+            aria-hidden="true"
+          >
             {progress}%
           </span>
         </div>
@@ -303,10 +374,8 @@ export function DocumentStatus({
         })}
       </ol>
 
-      {/* Security assurance — answers the three questions in every lawyer's head */}
       <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-        <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
-          <span aria-hidden="true">🔒</span>
+        <p className="text-xs text-slate-400 dark:text-slate-500">
           AES-256 encrypted · Only you can access this document · Never used for AI training
         </p>
       </div>
