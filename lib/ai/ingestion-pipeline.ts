@@ -29,6 +29,10 @@ import {
  * pipeline, not a user-initiated client operation. RLS does not
  * apply. The user_id on document_chunks is copied from the parent
  * document row to maintain ownership integrity.
+ *
+ * Sprint 3 update: extractPDFText now returns { text, numPages, paragraphs }
+ * from Azure Document Intelligence. paragraphs[] carries exact page numbers
+ * per paragraph — passed to chunkDocument for ADI-aware chunking in 3.5.
  */
 export async function runIngestionPipeline(
   documentId: string,
@@ -50,7 +54,7 @@ export async function runIngestionPipeline(
   }
 
   console.log(`\n${'='.repeat(80)}`)
-  console.log(`🚀 PRISM INGESTION PIPELINE STARTED`)
+  console.log(`PRISM INGESTION PIPELINE STARTED`)
   console.log(`Document ID: ${documentId}`)
   console.log(`Timestamp: ${new Date().toISOString()}`)
   console.log(`${'='.repeat(80)}\n`)
@@ -69,10 +73,8 @@ export async function runIngestionPipeline(
       throw new Error(`Document not found: ${documentId}`)
     }
 
-    // Capture user_id from the parent document so chunks inherit it
     const userId: string = document.user_id
-
-    console.log(`✓ Document: ${document.name} (owner: ${userId})`)
+    console.log(`Document: ${document.name} (owner: ${userId})`)
 
     // ── STEP 2: Download PDF ──────────────────────────────────────
     const downloadStart = Date.now()
@@ -90,17 +92,25 @@ export async function runIngestionPipeline(
     }
 
     stages.download = Date.now() - downloadStart
-    console.log(`✓ Downloaded (${stages.download}ms)`)
+    console.log(`Downloaded (${stages.download}ms)`)
 
-    // ── STEP 3: Parse PDF ─────────────────────────────────────────
+    // ── STEP 3: Parse PDF via Azure Document Intelligence ─────────
     const parseStart = Date.now()
-    console.log(`\n[Step 3/7] Parsing PDF content...`)
+    console.log(`\n[Step 3/7] Parsing PDF via Azure Document Intelligence...`)
 
     const arrayBuffer = await pdfBuffer.arrayBuffer()
-    const { text: fullText, numPages } = await extractPDFText(arrayBuffer)
+
+    // Sprint 3: extractPDFText now returns paragraphs[] with exact page numbers
+    const {
+      text: fullText,
+      numPages,
+      paragraphs,
+    } = await extractPDFText(arrayBuffer)
 
     stages.parse = Date.now() - parseStart
-    console.log(`✓ Parsed — ${numPages} pages, ${fullText.length.toLocaleString()} chars (${stages.parse}ms)`)
+    console.log(
+      `Parsed — ${numPages} pages, ${paragraphs.length} paragraphs, ${fullText.length.toLocaleString()} chars (${stages.parse}ms)`
+    )
 
     if (fullText.length < 100) {
       await supabaseAdmin
@@ -123,7 +133,7 @@ export async function runIngestionPipeline(
     try {
       analysis = await analyzeDocument(fullText, document.name)
     } catch {
-      console.warn(`⚠️  AI analysis failed, using fallback`)
+      console.warn(`WARNING: AI analysis failed, using fallback`)
       analysis = {
         document_type: detectDocumentType(fullText, document.name),
         has_table_of_contents: fullText.toLowerCase().includes('table of contents'),
@@ -135,7 +145,9 @@ export async function runIngestionPipeline(
     }
 
     stages.analysis = Date.now() - analysisStart
-    console.log(`✓ Analysis: ${analysis.document_type}, complexity ${analysis.complexity_score}/10 (${stages.analysis}ms)`)
+    console.log(
+      `Analysis: ${analysis.document_type}, complexity ${analysis.complexity_score}/10 (${stages.analysis}ms)`
+    )
 
     await supabaseAdmin
       .from('documents')
@@ -150,8 +162,10 @@ export async function runIngestionPipeline(
 
     // ── STEP 5: Adaptive Chunking ─────────────────────────────────
     const chunkingStart = Date.now()
-    console.log(`\n[Step 5/7] Creating adaptive chunks...`)
+    console.log(`\n[Step 5/7] Creating adaptive chunks from ADI paragraphs...`)
 
+    // Sprint 3: paragraphs[] passed to chunkDocument — ADI-aware chunking
+    // uses exact page numbers from ADI, not character position estimates
     const chunks = await chunkDocument({
       optimal_chunk_size: analysis.optimal_chunk_size,
       overlap: 100,
@@ -159,6 +173,7 @@ export async function runIngestionPipeline(
       full_text: fullText,
       page_count: numPages,
       section_headers: analysis.section_headers,
+      paragraphs,                // ADI paragraphs with exact page numbers
     })
 
     const validation = validateChunks(chunks)
@@ -168,11 +183,10 @@ export async function runIngestionPipeline(
 
     const chunkStats = getChunkingStats(chunks)
     stages.chunking = Date.now() - chunkingStart
-    console.log(`✓ ${chunkStats.total_chunks} chunks created (${stages.chunking}ms)`)
+    console.log(`${chunkStats.total_chunks} chunks created (${stages.chunking}ms)`)
 
-    // Pass userId so storeChunksInDatabase can stamp it on each chunk row
     await storeChunksInDatabase(documentId, chunks, userId)
-    console.log(`✓ Chunks stored`)
+    console.log(`Chunks stored`)
 
     // ── STEP 6: Vector Embeddings ─────────────────────────────────
     const embeddingsStart = Date.now()
@@ -180,7 +194,9 @@ export async function runIngestionPipeline(
 
     const embeddingStats = await generateDocumentEmbeddings(documentId)
     stages.embeddings = Date.now() - embeddingsStart
-    console.log(`✓ Embeddings: ${embeddingStats.successful_embeddings}/${embeddingStats.total_chunks} (${stages.embeddings}ms) — $${embeddingStats.estimated_cost.toFixed(6)}`)
+    console.log(
+      `Embeddings: ${embeddingStats.successful_embeddings}/${embeddingStats.total_chunks} (${stages.embeddings}ms) — $${embeddingStats.estimated_cost.toFixed(6)}`
+    )
 
     // ── STEP 7: Metadata Enrichment ───────────────────────────────
     const enrichmentStart = Date.now()
@@ -188,7 +204,9 @@ export async function runIngestionPipeline(
 
     const enrichmentStats = await enrichDocumentChunks(documentId, enrichmentConfig)
     stages.enrichment = Date.now() - enrichmentStart
-    console.log(`✓ Enrichment: ${enrichmentStats.successful_enrichments}/${enrichmentStats.total_chunks} (${stages.enrichment}ms) — $${enrichmentStats.estimated_cost.toFixed(6)}`)
+    console.log(
+      `Enrichment: ${enrichmentStats.successful_enrichments}/${enrichmentStats.total_chunks} (${stages.enrichment}ms) — $${enrichmentStats.estimated_cost.toFixed(6)}`
+    )
 
     // ── Finalize ──────────────────────────────────────────────────
     await supabaseAdmin
@@ -199,14 +217,19 @@ export async function runIngestionPipeline(
     const totalDurationMs = Date.now() - startTime
     const totalCost = embeddingStats.estimated_cost + enrichmentStats.estimated_cost
 
-    console.log(`\n✅ PIPELINE COMPLETE — ${(totalDurationMs / 1000).toFixed(2)}s — $${totalCost.toFixed(6)}\n`)
+    console.log(
+      `\nPIPELINE COMPLETE — ${(totalDurationMs / 1000).toFixed(2)}s — $${totalCost.toFixed(6)}\n`
+    )
 
     return { success: true, documentId, totalCost, totalDurationMs }
+
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     const totalDurationMs = Date.now() - startTime
 
-    console.error(`\n❌ PIPELINE FAILED: ${message} (${(totalDurationMs / 1000).toFixed(2)}s)\n`)
+    console.error(
+      `\nPIPELINE FAILED: ${message} (${(totalDurationMs / 1000).toFixed(2)}s)\n`
+    )
 
     // Rollback
     try {
