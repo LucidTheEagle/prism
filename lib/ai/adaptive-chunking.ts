@@ -1,13 +1,16 @@
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 import { supabaseAdmin } from '@/lib/supabase/server'
+import type { ADIParagraph } from '@/lib/pdfParser'
 
-/**
- * PRISM Adaptive Chunking System
- * Intelligently splits document text based on AI analysis
- *
- * Phase 5.2 update: storeChunksInDatabase now accepts userId and stamps
- * it on every chunk row so RLS ownership policies are satisfied.
- */
+// ============================================================================
+// PRISM ADAPTIVE CHUNKING — V1
+// Sprint 3 update: chunkDocument now accepts paragraphs[] from Azure Document
+// Intelligence. Each chunk's page number is assigned from the ADI paragraph
+// whose character range contains the chunk's start position — exact page
+// numbers, not character position estimates.
+//
+// Previous estimate formula archived below.
+// ============================================================================
 
 export interface ChunkResult {
   chunk_id: string
@@ -28,8 +31,90 @@ export interface ChunkingConfig {
   full_text: string
   page_count: number
   section_headers: string[]
+  paragraphs: ADIParagraph[]    // ADI paragraphs with exact page numbers
 }
 
+// ----------------------------------------------------------------------------
+// buildPageMap — maps character ranges to exact ADI page numbers
+// Called once before chunking. Each entry covers [start_char, end_char).
+// When a chunk's start_char falls within a range, that page number is used.
+// ----------------------------------------------------------------------------
+interface PageRange {
+  start_char: number
+  end_char: number
+  page_number: number
+  section_header: string | null
+}
+
+function buildPageMap(fullText: string, paragraphs: ADIParagraph[]): PageRange[] {
+  const pageMap: PageRange[] = []
+  let searchFrom = 0
+
+  for (const para of paragraphs) {
+    if (!para.content || para.content.trim().length === 0) continue
+
+    // Locate paragraph in full text by content match
+    const idx = fullText.indexOf(para.content.trim(), searchFrom)
+    if (idx === -1) continue
+
+    const startChar = idx
+    const endChar = idx + para.content.trim().length
+
+    pageMap.push({
+      start_char: startChar,
+      end_char: endChar,
+      page_number: para.page_number,
+      section_header: para.section_header,
+    })
+
+    // Advance search position — allow overlap for adjacent paragraphs
+    searchFrom = Math.max(searchFrom, endChar - 50)
+  }
+
+  return pageMap
+}
+
+// ----------------------------------------------------------------------------
+// resolvePageFromMap — find which ADI paragraph a chunk start falls within
+// Falls back to page 1 if no match found — safe default
+// ----------------------------------------------------------------------------
+function resolvePageFromMap(
+  startChar: number,
+  pageMap: PageRange[]
+): { page_number: number; section_header: string | null } {
+  // Find the paragraph range containing this character position
+  for (const range of pageMap) {
+    if (startChar >= range.start_char && startChar < range.end_char) {
+      return {
+        page_number: range.page_number,
+        section_header: range.section_header,
+      }
+    }
+  }
+
+  // No exact match — find the closest preceding paragraph
+  let closest: PageRange | null = null
+  for (const range of pageMap) {
+    if (range.start_char <= startChar) {
+      if (!closest || range.start_char > closest.start_char) {
+        closest = range
+      }
+    }
+  }
+
+  if (closest) {
+    return {
+      page_number: closest.page_number,
+      section_header: closest.section_header,
+    }
+  }
+
+  return { page_number: 1, section_header: null }
+}
+
+// ----------------------------------------------------------------------------
+// chunkDocument — main export
+// ----------------------------------------------------------------------------
 export async function chunkDocument(config: ChunkingConfig): Promise<ChunkResult[]> {
   const {
     optimal_chunk_size,
@@ -37,9 +122,11 @@ export async function chunkDocument(config: ChunkingConfig): Promise<ChunkResult
     full_text,
     page_count,
     section_headers,
+    paragraphs,
   } = config
 
   console.log(`[Chunking] Starting — size: ${optimal_chunk_size}, overlap: ${overlap}`)
+  console.log(`[Chunking] ADI paragraphs available: ${paragraphs.length}`)
 
   const chunkSizeChars = optimal_chunk_size * 4
   const overlapChars = overlap * 4
@@ -65,6 +152,16 @@ export async function chunkDocument(config: ChunkingConfig): Promise<ChunkResult
   const textChunks = await splitter.splitText(full_text)
   console.log(`[Chunking] ${textChunks.length} chunks created`)
 
+  // Build page map from ADI paragraphs once — used for all chunks
+  const pageMap = buildPageMap(full_text, paragraphs)
+  const useADIPageMap = pageMap.length > 0
+
+  if (useADIPageMap) {
+    console.log(`[Chunking] Using ADI page map — ${pageMap.length} paragraph ranges`)
+  } else {
+    console.log(`[Chunking] ADI page map empty — falling back to character position estimate`)
+  }
+
   const chunks: ChunkResult[] = []
   let currentCharPosition = 0
 
@@ -72,18 +169,31 @@ export async function chunkDocument(config: ChunkingConfig): Promise<ChunkResult
     const content = textChunks[i]
     const actualStartChar = full_text.indexOf(content, currentCharPosition)
     const actualEndChar = actualStartChar + content.length
-    const estimatedPage = Math.max(
-      1,
-      Math.ceil((actualStartChar / full_text.length) * page_count)
-    )
-    const sectionHeader = detectSectionHeader(content, section_headers)
+
+    let page: number
+    let sectionHeader: string | null
+
+    if (useADIPageMap) {
+      // ADI-exact page assignment — Sprint 3
+      const resolved = resolvePageFromMap(actualStartChar, pageMap)
+      page = resolved.page_number
+      sectionHeader = resolved.section_header
+    } else {
+      // Fallback — character position estimate
+      // Used only when ADI returned no paragraphs
+      page = Math.max(
+        1,
+        Math.ceil((actualStartChar / full_text.length) * page_count)
+      )
+      sectionHeader = detectSectionHeader(content, section_headers)
+    }
 
     chunks.push({
       chunk_id: `${i}`,
       content: content.trim(),
       chunk_index: i,
       metadata: {
-        page: estimatedPage,
+        page,
         start_char: actualStartChar,
         end_char: actualEndChar,
         section_header: sectionHeader,
@@ -96,6 +206,9 @@ export async function chunkDocument(config: ChunkingConfig): Promise<ChunkResult
   return chunks
 }
 
+// ----------------------------------------------------------------------------
+// detectSectionHeader — fallback only, used when ADI page map is empty
+// ----------------------------------------------------------------------------
 function detectSectionHeader(
   chunkContent: string,
   sectionHeaders: string[]
@@ -114,26 +227,19 @@ function detectSectionHeader(
   return null
 }
 
-/**
- * Store chunks in database.
- *
- * Phase 5.2: Added userId parameter — stamped on every chunk row so
- * the RLS policy "chunks: users select own" (auth.uid() = user_id)
- * resolves correctly when the authenticated user queries their chunks.
- *
- * Uses supabaseAdmin (bypasses RLS) because this runs server-side
- * inside the ingestion pipeline — not from a user browser session.
- */
+// ----------------------------------------------------------------------------
+// storeChunksInDatabase — unchanged from Phase 5.2
+// ----------------------------------------------------------------------------
 export async function storeChunksInDatabase(
   documentId: string,
   chunks: ChunkResult[],
-  userId: string              // ← Phase 5.2: required for RLS ownership
+  userId: string
 ): Promise<void> {
   console.log(`[Chunking] Storing ${chunks.length} chunks (user: ${userId})...`)
 
   const chunkRecords = chunks.map((chunk) => ({
     document_id: documentId,
-    user_id: userId,           // ← stamped on every row
+    user_id: userId,
     content: chunk.content,
     chunk_index: chunk.chunk_index,
     metadata: chunk.metadata,
@@ -148,9 +254,12 @@ export async function storeChunksInDatabase(
     throw new Error(`Failed to store chunks: ${error.message}`)
   }
 
-  console.log(`[Chunking] ✅ ${chunks.length} chunks stored`)
+  console.log(`[Chunking] ${chunks.length} chunks stored`)
 }
 
+// ----------------------------------------------------------------------------
+// validateChunks — unchanged
+// ----------------------------------------------------------------------------
 export function validateChunks(chunks: ChunkResult[]): {
   valid: boolean
   errors: string[]
@@ -182,6 +291,9 @@ export function validateChunks(chunks: ChunkResult[]): {
   return { valid: true, errors }
 }
 
+// ----------------------------------------------------------------------------
+// getChunkingStats — unchanged
+// ----------------------------------------------------------------------------
 export function getChunkingStats(chunks: ChunkResult[]): {
   total_chunks: number
   avg_chunk_size: number
@@ -206,6 +318,20 @@ export function getChunkingStats(chunks: ChunkResult[]): {
     avg_chunk_size: Math.round(sizes.reduce((a, b) => a + b, 0) / chunks.length),
     min_chunk_size: Math.min(...sizes),
     max_chunk_size: Math.max(...sizes),
-    chunks_with_headers: chunks.filter((c) => c.metadata.section_header !== null).length,
+    chunks_with_headers: chunks.filter(
+      (c) => c.metadata.section_header !== null
+    ).length,
   }
 }
+
+// ============================================================================
+// ARCHIVED — character position page estimate (replaced by ADI page map)
+// ============================================================================
+
+// Previous page estimation — used when no ADI paragraph data available:
+// const estimatedPage = Math.max(
+//   1,
+//   Math.ceil((actualStartChar / full_text.length) * page_count)
+// )
+// This formula produced incorrect page citations on dense legal documents.
+// Replaced by resolvePageFromMap() which uses ADI paragraph boundaries.
