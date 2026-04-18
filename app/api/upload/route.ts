@@ -124,6 +124,7 @@ export async function POST(request: NextRequest) {
         file_url: fileUrl,
         file_size_bytes: file.size,
         status: 'processing',
+        ingestion_status: 'queued',      // Sprint 4 — Realtime status tracking
         user_id: user.id,
         file_hash: fileHash,
       })

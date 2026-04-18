@@ -30,9 +30,9 @@ import {
  * apply. The user_id on document_chunks is copied from the parent
  * document row to maintain ownership integrity.
  *
- * Sprint 3 update: extractPDFText now returns { text, numPages, paragraphs }
- * from Azure Document Intelligence. paragraphs[] carries exact page numbers
- * per paragraph — passed to chunkDocument for ADI-aware chunking in 3.5.
+ * Sprint 4 update: ingestion_status transitions pushed via Supabase
+ * Realtime on every state change — queued → processing → ready | failed.
+ * DocumentStatus subscribes to these transitions directly.
  */
 export async function runIngestionPipeline(
   documentId: string,
@@ -59,6 +59,17 @@ export async function runIngestionPipeline(
   console.log(`Timestamp: ${new Date().toISOString()}`)
   console.log(`${'='.repeat(80)}\n`)
 
+  // ── Transition: queued → processing ──────────────────────────────────────
+  // Pushed via Supabase Realtime — DocumentStatus receives this immediately
+  await supabaseAdmin
+    .from('documents')
+    .update({
+      ingestion_status: 'processing',
+    })
+    .eq('id', documentId)
+
+  console.log(`[Pipeline] ingestion_status → processing`)
+
   try {
     // ── STEP 1: Fetch document ────────────────────────────────────
     console.log(`[Step 1/7] Fetching document from database...`)
@@ -74,7 +85,7 @@ export async function runIngestionPipeline(
     }
 
     const userId: string = document.user_id
-    console.log(`Document: ${document.name} (owner: ${userId})`)
+    console.log(`[Step 1/7] Document: ${document.name} (owner: ${userId})`)
 
     // ── STEP 2: Download PDF ──────────────────────────────────────
     const downloadStart = Date.now()
@@ -88,11 +99,13 @@ export async function runIngestionPipeline(
       .download(filename)
 
     if (downloadError || !pdfBuffer) {
-      throw new Error(`Failed to download PDF: ${downloadError?.message ?? 'Unknown error'}`)
+      throw new Error(
+        `Failed to download PDF: ${downloadError?.message ?? 'Unknown error'}`
+      )
     }
 
     stages.download = Date.now() - downloadStart
-    console.log(`Downloaded (${stages.download}ms)`)
+    console.log(`[Step 2/7] Downloaded (${stages.download}ms)`)
 
     // ── STEP 3: Parse PDF via Azure Document Intelligence ─────────
     const parseStart = Date.now()
@@ -100,7 +113,6 @@ export async function runIngestionPipeline(
 
     const arrayBuffer = await pdfBuffer.arrayBuffer()
 
-    // Sprint 3: extractPDFText now returns paragraphs[] with exact page numbers
     const {
       text: fullText,
       numPages,
@@ -109,7 +121,7 @@ export async function runIngestionPipeline(
 
     stages.parse = Date.now() - parseStart
     console.log(
-      `Parsed — ${numPages} pages, ${paragraphs.length} paragraphs, ${fullText.length.toLocaleString()} chars (${stages.parse}ms)`
+      `[Step 3/7] Parsed — ${numPages} pages, ${paragraphs.length} paragraphs, ${fullText.length.toLocaleString()} chars (${stages.parse}ms)`
     )
 
     if (fullText.length < 100) {
@@ -133,7 +145,7 @@ export async function runIngestionPipeline(
     try {
       analysis = await analyzeDocument(fullText, document.name)
     } catch {
-      console.warn(`WARNING: AI analysis failed, using fallback`)
+      console.warn(`[Step 4/7] AI analysis failed, using fallback`)
       analysis = {
         document_type: detectDocumentType(fullText, document.name),
         has_table_of_contents: fullText.toLowerCase().includes('table of contents'),
@@ -146,7 +158,7 @@ export async function runIngestionPipeline(
 
     stages.analysis = Date.now() - analysisStart
     console.log(
-      `Analysis: ${analysis.document_type}, complexity ${analysis.complexity_score}/10 (${stages.analysis}ms)`
+      `[Step 4/7] Analysis: ${analysis.document_type}, complexity ${analysis.complexity_score}/10 (${stages.analysis}ms)`
     )
 
     await supabaseAdmin
@@ -164,8 +176,6 @@ export async function runIngestionPipeline(
     const chunkingStart = Date.now()
     console.log(`\n[Step 5/7] Creating adaptive chunks from ADI paragraphs...`)
 
-    // Sprint 3: paragraphs[] passed to chunkDocument — ADI-aware chunking
-    // uses exact page numbers from ADI, not character position estimates
     const chunks = await chunkDocument({
       optimal_chunk_size: analysis.optimal_chunk_size,
       overlap: 100,
@@ -173,7 +183,7 @@ export async function runIngestionPipeline(
       full_text: fullText,
       page_count: numPages,
       section_headers: analysis.section_headers,
-      paragraphs,                // ADI paragraphs with exact page numbers
+      paragraphs,
     })
 
     const validation = validateChunks(chunks)
@@ -183,10 +193,10 @@ export async function runIngestionPipeline(
 
     const chunkStats = getChunkingStats(chunks)
     stages.chunking = Date.now() - chunkingStart
-    console.log(`${chunkStats.total_chunks} chunks created (${stages.chunking}ms)`)
+    console.log(`[Step 5/7] ${chunkStats.total_chunks} chunks created (${stages.chunking}ms)`)
 
     await storeChunksInDatabase(documentId, chunks, userId)
-    console.log(`Chunks stored`)
+    console.log(`[Step 5/7] Chunks stored`)
 
     // ── STEP 6: Vector Embeddings ─────────────────────────────────
     const embeddingsStart = Date.now()
@@ -195,7 +205,7 @@ export async function runIngestionPipeline(
     const embeddingStats = await generateDocumentEmbeddings(documentId)
     stages.embeddings = Date.now() - embeddingsStart
     console.log(
-      `Embeddings: ${embeddingStats.successful_embeddings}/${embeddingStats.total_chunks} (${stages.embeddings}ms) — $${embeddingStats.estimated_cost.toFixed(6)}`
+      `[Step 6/7] Embeddings: ${embeddingStats.successful_embeddings}/${embeddingStats.total_chunks} (${stages.embeddings}ms) — $${embeddingStats.estimated_cost.toFixed(6)}`
     )
 
     // ── STEP 7: Metadata Enrichment ───────────────────────────────
@@ -205,14 +215,21 @@ export async function runIngestionPipeline(
     const enrichmentStats = await enrichDocumentChunks(documentId, enrichmentConfig)
     stages.enrichment = Date.now() - enrichmentStart
     console.log(
-      `Enrichment: ${enrichmentStats.successful_enrichments}/${enrichmentStats.total_chunks} (${stages.enrichment}ms) — $${enrichmentStats.estimated_cost.toFixed(6)}`
+      `[Step 7/7] Enrichment: ${enrichmentStats.successful_enrichments}/${enrichmentStats.total_chunks} (${stages.enrichment}ms) — $${enrichmentStats.estimated_cost.toFixed(6)}`
     )
 
-    // ── Finalize ──────────────────────────────────────────────────
+    // ── Finalize — transition: processing → ready ─────────────────
+    // Pushed via Supabase Realtime — DocumentStatus receives this immediately
     await supabaseAdmin
       .from('documents')
-      .update({ status: 'ready', updated_at: new Date().toISOString() })
+      .update({
+        status: 'ready',
+        ingestion_status: 'ready',
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', documentId)
+
+    console.log(`[Pipeline] ingestion_status → ready`)
 
     const totalDurationMs = Date.now() - startTime
     const totalCost = embeddingStats.estimated_cost + enrichmentStats.estimated_cost
@@ -231,7 +248,8 @@ export async function runIngestionPipeline(
       `\nPIPELINE FAILED: ${message} (${(totalDurationMs / 1000).toFixed(2)}s)\n`
     )
 
-    // Rollback
+    // ── Transition: processing → failed ──────────────────────────
+    // Pushed via Supabase Realtime — DocumentStatus receives this immediately
     try {
       await supabaseAdmin
         .from('document_chunks')
@@ -242,10 +260,14 @@ export async function runIngestionPipeline(
         .from('documents')
         .update({
           status: 'failed',
+          ingestion_status: 'failed',
+          ingestion_error: message,
           error_message: message,
           updated_at: new Date().toISOString(),
         })
         .eq('id', documentId)
+
+      console.log(`[Pipeline] ingestion_status → failed`)
     } catch (rollbackError) {
       console.error(`[Rollback] Failed:`, rollbackError)
     }
