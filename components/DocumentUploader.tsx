@@ -211,12 +211,11 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
         )}
       </div>
 
-      {/* Security trust badge */}
+      {/* Security trust badge — no emoji */}
       <div
         className="mt-3 flex items-center justify-center gap-1.5 text-xs text-slate-400 dark:text-slate-500"
         aria-label="Security information"
       >
-        <span aria-hidden="true">🔒</span>
         <span>AES-256 Encrypted · Isolated to your account · Never used for AI training</span>
       </div>
 
