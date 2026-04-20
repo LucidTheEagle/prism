@@ -62,7 +62,7 @@ export async function vectorSearch(
       match_threshold: threshold,
       match_count: limit,
       filter_document_id: documentId,
-      filter_user_id: null,   // ← FIX: was userId, caused 0 results (dc.user_id doesn't exist)
+      filter_user_id: userId ?? null,
     })
 
     if (error) {
@@ -84,17 +84,33 @@ export async function vectorSearch(
       ai_summary?: string
       keywords?: string[]
       semantic_category?: string
+      page_number?: number
+      section_header?: string | null
+      chunk_index?: number
     }) => ({
       id: row.id,
       document_id: row.document_id,
       content: row.content,
-      chunk_index:
-        row.metadata &&
+      chunk_index: row.chunk_index ??
+        (row.metadata &&
         typeof row.metadata === 'object' &&
         'chunk_index' in row.metadata
           ? (row.metadata as { chunk_index?: number }).chunk_index ?? 0
-          : 0,
-      metadata: row.metadata || {},
+          : 0),
+      metadata: {
+        page: row.page_number ??
+          (row.metadata &&
+          typeof row.metadata === 'object' &&
+          'page' in row.metadata
+            ? (row.metadata as { page?: number }).page ?? 1
+            : 1),
+        section_header: row.section_header ??
+          (row.metadata &&
+          typeof row.metadata === 'object' &&
+          'section_header' in row.metadata
+            ? (row.metadata as { section_header?: string }).section_header ?? null
+            : null),
+      },
       ai_summary: row.ai_summary || null,
       keywords: row.keywords || [],
       semantic_category: row.semantic_category || null,
@@ -133,7 +149,7 @@ export async function bm25Search(
       query_text: query,
       match_count: limit,
       filter_document_id: documentId,
-      filter_user_id: null,   // ← FIX: was userId, caused 0 results (broken JOIN in SQL)
+      filter_user_id: userId ?? null,
     })
 
     if (error) {
@@ -155,17 +171,33 @@ export async function bm25Search(
       ai_summary?: string
       keywords?: string[]
       semantic_category?: string
+      page_number?: number
+      section_header?: string | null
+      chunk_index?: number
     }) => ({
       id: row.id,
       document_id: row.document_id,
       content: row.content,
-      chunk_index:
-        row.metadata &&
+      chunk_index: row.chunk_index ??
+        (row.metadata &&
         typeof row.metadata === 'object' &&
         'chunk_index' in row.metadata
           ? (row.metadata as { chunk_index?: number }).chunk_index ?? 0
-          : 0,
-      metadata: row.metadata || {},
+          : 0),
+      metadata: {
+        page: row.page_number ??
+          (row.metadata &&
+          typeof row.metadata === 'object' &&
+          'page' in row.metadata
+            ? (row.metadata as { page?: number }).page ?? 1
+            : 1),
+        section_header: row.section_header ??
+          (row.metadata &&
+          typeof row.metadata === 'object' &&
+          'section_header' in row.metadata
+            ? (row.metadata as { section_header?: string }).section_header ?? null
+            : null),
+      },
       ai_summary: row.ai_summary || null,
       keywords: row.keywords || [],
       semantic_category: row.semantic_category || null,
@@ -269,7 +301,7 @@ export async function hybridSearch(
 
   try {
     console.log(`\n${'='.repeat(80)}`)
-    console.log(`🔍 HYBRID SEARCH`)
+    console.log(`HYBRID SEARCH`)
     console.log(`Query: "${query}"`)
     console.log(`Strategy: ${(analysis.vector_weight * 100).toFixed(0)}% vector + ${(analysis.bm25_weight * 100).toFixed(0)}% BM25`)
     console.log(`User scope: ${userId ?? 'none (unrestricted)'}`)
@@ -277,7 +309,7 @@ export async function hybridSearch(
 
     console.log('[Step 1/4] Generating query embedding...')
     const queryEmbedding = await generateQueryEmbedding(query)
-    console.log('✓ Embedding generated (1536 dimensions)')
+    console.log('[Step 1/4] Query embedding generated (1536 dimensions)')
 
     console.log('\n[Step 2/4] Vector similarity search...')
     const vectorResults = await vectorSearch(
@@ -287,7 +319,7 @@ export async function hybridSearch(
       analysis.confidence_threshold,
       userId
     )
-    console.log(`✓ ${vectorResults.length} vector results`)
+    console.log(`[Step 2/4] Vector similarity search complete — ${vectorResults.length} results`)
 
     console.log('\n[Step 3/4] BM25 keyword search...')
     const bm25Results = await bm25Search(
@@ -296,7 +328,7 @@ export async function hybridSearch(
       analysis.chunk_count * 2,
       userId
     )
-    console.log(`✓ ${bm25Results.length} BM25 results`)
+    console.log(`[Step 3/4] BM25 search complete — ${bm25Results.length} results`)
 
     console.log('\n[Step 4/4] Reciprocal Rank Fusion...')
     const fusedResults = reciprocalRankFusion(
@@ -309,13 +341,13 @@ export async function hybridSearch(
     const finalResults = fusedResults.slice(0, analysis.chunk_count)
     const duration = Date.now() - startTime
 
-    console.log(`\n✅ Hybrid search complete — ${finalResults.length} results in ${duration}ms`)
+    console.log(`\n[Step 4/4] Hybrid search complete — ${finalResults.length} results in ${duration}ms`)
     console.log(`${'='.repeat(80)}\n`)
 
     return finalResults
   } catch (error) {
     const duration = Date.now() - startTime
-    console.error(`\n❌ Hybrid search failed after ${duration}ms`, error)
+    console.error(`\nHybrid search failed after ${duration}ms`, error)
     throw error
   }
 }

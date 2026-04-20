@@ -238,11 +238,17 @@ export async function storeChunksInDatabase(
   console.log(`[Chunking] Storing ${chunks.length} chunks (user: ${userId})...`)
 
   const chunkRecords = chunks.map((chunk) => ({
+    // Existing columns — unchanged
     document_id: documentId,
     user_id: userId,
     content: chunk.content,
     chunk_index: chunk.chunk_index,
     metadata: chunk.metadata,
+    // Sprint 5 — ChunkMetadata five fields as top-level columns
+    // tenant_id: canonical multi-tenant isolation field — maps to user_id
+    tenant_id: userId,
+    page_number: chunk.metadata.page,
+    section_header: chunk.metadata.section_header ?? null,
   }))
 
   const { error } = await supabaseAdmin
