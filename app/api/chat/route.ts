@@ -95,20 +95,54 @@ export async function POST(request: NextRequest) {
     let documentText: string
 
     try {
-      // Extract storage path from file_url
-      // file_url format: https://<project>.supabase.co/storage/v1/object/public/<bucket>/<path>
       const fileUrl = document.file_url as string
-      const storagePathMatch = fileUrl.match(/\/storage\/v1\/object\/(?:public|authenticated)\/(.+)/)
 
-      if (!storagePathMatch) {
-        throw new Error(`Cannot parse storage path from file_url: ${fileUrl}`)
+      // Extract bucket and file path from Supabase Storage URL
+      // Handles both formats:
+      // Format A (with access mode): /storage/v1/object/public/<bucket>/<path>
+      // Format B (without access mode): /storage/v1/object/<bucket>/<path>
+      const marker = '/storage/v1/object/'
+
+      let pathname: string
+      try {
+        pathname = fileUrl.startsWith('http')
+          ? new URL(fileUrl).pathname
+          : fileUrl
+      } catch {
+        throw new Error(`Invalid file_url: ${fileUrl}`)
       }
 
-      const storagePath = storagePathMatch[1]
-      // storagePath is now "bucket-name/path/to/file"
-      const bucketEnd = storagePath.indexOf('/')
-      const bucket = storagePath.slice(0, bucketEnd)
-      const filePath = storagePath.slice(bucketEnd + 1)
+      const markerIndex = pathname.indexOf(marker)
+      if (markerIndex === -1) {
+        throw new Error(`Storage marker not found in path: ${pathname}`)
+      }
+
+      const remainder = pathname.slice(markerIndex + marker.length)
+      const segments = remainder.split('/').filter(Boolean)
+
+      if (segments.length < 2) {
+        throw new Error(`Insufficient path segments in: ${remainder}`)
+      }
+
+      let bucket: string
+      let filePath: string
+
+      // Detect format — if first segment is a known access mode prefix, skip it
+      const accessModes = ['public', 'authenticated', 'sign']
+      if (accessModes.includes(segments[0])) {
+        // Format A: public/<bucket>/<path>
+        if (segments.length < 3) {
+          throw new Error(`Invalid storage path after access mode: ${remainder}`)
+        }
+        bucket = segments[1]
+        filePath = decodeURIComponent(segments.slice(2).join('/'))
+      } else {
+        // Format B: <bucket>/<path> — direct, no access mode prefix
+        bucket = segments[0]
+        filePath = decodeURIComponent(segments.slice(1).join('/'))
+      }
+
+      console.log(`[Step 1/3] Downloading from bucket: ${bucket}, path: ${filePath}`)
 
       const { data: fileData, error: storageError } = await supabaseAdmin
         .storage
@@ -116,15 +150,21 @@ export async function POST(request: NextRequest) {
         .download(filePath)
 
       if (storageError || !fileData) {
-        throw new Error(`Storage download failed: ${storageError?.message}`)
+        throw new Error(
+          `Storage download failed (bucket="${bucket}", path="${filePath}"): ${storageError?.message}`
+        )
       }
 
       documentText = await fileData.text()
-      console.log(`✓ Document text fetched — ${documentText.length} characters`)
+      console.log(`[Step 1/3] Document text fetched — ${documentText.length} characters`)
     } catch (error) {
       console.error('[Chat] Document text fetch failed:', error)
       return NextResponse.json(
-        { error: 'Failed to load document content for analysis' },
+        {
+          error: `Failed to load document content for analysis: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        },
         { status: 500 }
       )
     }
