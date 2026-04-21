@@ -50,7 +50,7 @@ function HowItWorksSection() {
       step: '04',
       title: 'Verified Answer with Proof',
       description:
-        'Every answer arrives with a confidence score and a clickable citation that jumps your PDF viewer to the exact paragraph used. You never have to trust the system blindly — you verify every claim in seconds.',
+        'Every answer is classified as Explicitly Stated, Inferred, or Silent — never a percentage guess. A clickable citation jumps your PDF viewer to the exact paragraph. You never trust the system blindly — you verify every claim in seconds.',
       badge: 'Forensic Citations',
     },
   ]
@@ -301,7 +301,6 @@ export default function Home() {
               </strong>
             </p>
             <p className="mt-3 text-xs sm:text-sm text-slate-500 dark:text-slate-400 flex items-center justify-center gap-1.5">
-              <span aria-hidden="true">🔒</span>
               AES-256 encrypted · Isolated to your account · Never used to train any AI model
             </p>
           </header>
@@ -326,15 +325,15 @@ export default function Home() {
               {[
                 {
                   icon: <Target className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" aria-hidden="true" />,
-                  stat: 'High Confidence',
-                  label: 'Answer Quality',
-                  sub: 'AI self-validates every answer',
+                  stat: 'Verified or Silent',
+                  label: 'Epistemic Certainty',
+                  sub: 'Every answer categorised — never a guess',
                 },
                 {
                   icon: <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" aria-hidden="true" />,
-                  stat: 'Multi-Pass',
-                  label: 'Reasoning Engine',
-                  sub: 'Three-stage validation pipeline',
+                  stat: 'Four-Agent',
+                  label: 'Reasoning Pipeline',
+                  sub: 'Independent verification before every answer',
                 },
                 {
                   icon: <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" aria-hidden="true" />,
