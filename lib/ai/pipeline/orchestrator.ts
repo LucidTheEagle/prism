@@ -294,7 +294,7 @@ function buildErrorResult(
   return {
     logos: {
       epistemic_category: 'SILENT',
-      answer: `PRISM encountered an error processing this query. ${reason}.`,
+      answer: `PRISM encountered an error processing this query. Please try again.`,
       closing_statement: 'Please try again or contact support if the issue persists.',
     },
     aletheia: emptyAletheia,
