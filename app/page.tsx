@@ -165,6 +165,87 @@ function AuthGateBanner() {
   )
 }
 
+const DEMO_DOCUMENT_ID = process.env.NEXT_PUBLIC_DEMO_DOCUMENT_ID ?? ''
+
+const ONBOARDING_QUERIES = [
+  'What are the termination conditions and notice periods under this agreement?',
+  'Does this agreement comply with the Nigeria Data Protection Act 2023?',
+  'What is the liability cap and how does it relate to the total contract value?',
+]
+
+function OnboardingBanner() {
+  const router = useRouter()
+
+  function handleOpenDemo() {
+    router.push(`/chat?doc=${DEMO_DOCUMENT_ID}`)
+  }
+
+  return (
+    <div className="w-full max-w-2xl mx-auto mb-8">
+      <div className="border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-xl p-6">
+
+        {/* Framing statement */}
+        <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-widest mb-4">
+          Getting started
+        </p>
+        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-5">
+          Interrogate your document. Every answer is verified against the source or declared absent — never a guess.
+        </p>
+
+        {/* Sample document card */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4 mb-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 bg-emerald-100 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-center justify-center shrink-0">
+                <FileText className="w-4 h-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                  Professional Services and Technology Integration Agreement
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  19 pages · Nigerian commercial contract · Pre-loaded and ready
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleOpenDemo}
+              className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            >
+              Open
+            </button>
+          </div>
+
+          {/* Pre-written queries */}
+          <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+              Try these queries on this document:
+            </p>
+            <ul className="space-y-2 list-none">
+              {ONBOARDING_QUERIES.map((q) => (
+                <li key={q}>
+                  <button
+                    onClick={() => {
+                      router.push(`/chat?doc=${DEMO_DOCUMENT_ID}`)
+                    }}
+                    className="w-full text-left text-xs text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
+                  >
+                    {q}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          Or upload your own document below to begin your own analysis.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function Home() {
   const router = useRouter()
   const [documentId, setDocumentId] = useState<string | null>(null)
@@ -172,6 +253,7 @@ export default function Home() {
   const [processingFailed, setProcessingFailed] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [authLoaded, setAuthLoaded] = useState(false)
+  const [hasDocuments, setHasDocuments] = useState<boolean | null>(null)
 
   const supabase = createClient()
 
@@ -187,6 +269,19 @@ export default function Home() {
 
     return () => subscription.unsubscribe()
   }, [supabase])
+
+  useEffect(() => {
+    if (!user) return
+    fetch('/api/documents')
+      .then(r => r.json())
+      .then(data => {
+        const docs = (data.documents ?? []).filter(
+          (d: { status: string }) => d.status === 'ready'
+        )
+        setHasDocuments(docs.length > 0)
+      })
+      .catch(() => setHasDocuments(false))
+  }, [user])
 
   const handleUploadComplete = (id: string) => {
     setDocumentId(id)
@@ -314,7 +409,12 @@ export default function Home() {
                 aria-busy="true"
               />
             ) : user ? (
-              <DocumentUploader onUploadComplete={handleUploadComplete} />
+              <>
+                {hasDocuments === false && DEMO_DOCUMENT_ID && (
+                  <OnboardingBanner />
+                )}
+                <DocumentUploader onUploadComplete={handleUploadComplete} />
+              </>
             ) : (
               <AuthGateBanner />
             )}

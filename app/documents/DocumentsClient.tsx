@@ -292,7 +292,6 @@ export default function DocumentsClient({ documents: initialDocuments }: { docum
       {/* Security note */}
       <div className="mt-8 p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl">
         <p className="text-xs text-slate-500 dark:text-slate-400 flex items-start gap-2">
-          <span aria-hidden="true">🔒</span>
           <span>
             Deleting a document permanently purges the original PDF, all vector embeddings, text chunks, and chat history from our servers. A timestamped Destruction Receipt is downloaded as cryptographic proof.
           </span>
