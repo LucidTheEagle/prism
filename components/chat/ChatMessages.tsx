@@ -102,17 +102,22 @@ const INFERENCE_STAGES = [
 
 function GlassBoxIndicator() {
   const [stageIndex, setStageIndex] = useState(0)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       setStageIndex(prev => {
         if (prev < INFERENCE_STAGES.length - 1) return prev + 1
-        clearInterval(interval)
+        if (intervalRef.current) clearInterval(intervalRef.current)
         return prev
       })
-    }, 6000)
-    return () => clearInterval(interval)
+    }, 2500)
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
   }, [])
+
+  const isComplete = stageIndex === INFERENCE_STAGES.length - 1
 
   return (
     <div
@@ -123,51 +128,64 @@ function GlassBoxIndicator() {
     >
       <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-bl-md shadow-sm border border-slate-200 dark:border-slate-700 px-4 sm:px-5 py-3 sm:py-4 max-w-xs">
         <div className="space-y-2">
-          {INFERENCE_STAGES.map((stage, idx) => (
-            <div
-              key={stage}
-              className={`flex items-center gap-2 transition-all duration-500 ${
-                idx < stageIndex
-                  ? 'opacity-40'
-                  : idx === stageIndex
-                  ? 'opacity-100'
-                  : 'opacity-20'
-              }`}
-              aria-hidden={idx !== stageIndex}
-            >
-              {idx < stageIndex ? (
-                <CheckCircle2
-                  className="w-3.5 h-3.5 text-emerald-500 shrink-0"
-                  aria-hidden="true"
-                />
-              ) : idx === stageIndex ? (
-                <div
-                  className="w-3.5 h-3.5 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin shrink-0"
-                  aria-hidden="true"
-                />
-              ) : (
-                <div
-                  className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 dark:border-slate-600 shrink-0"
-                  aria-hidden="true"
-                />
-              )}
-              <span
-                className={`text-xs ${
-                  idx === stageIndex
-                    ? 'text-slate-700 dark:text-slate-300 font-medium'
-                    : 'text-slate-400 dark:text-slate-500'
+          {INFERENCE_STAGES.map((stage, idx) => {
+            const isDone = idx < stageIndex
+            const isActive = idx === stageIndex
+            const isPending = idx > stageIndex
+            const isFinalActive = isActive && isComplete
+
+            return (
+              <div
+                key={stage}
+                className={`flex items-center gap-2 transition-all duration-500 ${
+                  isDone
+                    ? 'opacity-40'
+                    : isActive
+                    ? 'opacity-100'
+                    : 'opacity-20'
                 }`}
+                aria-hidden={!isActive}
               >
-                {stage}
-              </span>
-            </div>
-          ))}
+                {isDone ? (
+                  <CheckCircle2
+                    className="w-3.5 h-3.5 text-emerald-500 shrink-0"
+                    aria-hidden="true"
+                  />
+                ) : isFinalActive ? (
+                  <div
+                    className="w-3.5 h-3.5 rounded-full bg-emerald-500 shrink-0 animate-pulse"
+                    aria-hidden="true"
+                  />
+                ) : isActive ? (
+                  <div
+                    className="w-3.5 h-3.5 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin shrink-0"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <div
+                    className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 dark:border-slate-600 shrink-0"
+                    aria-hidden="true"
+                  />
+                )}
+                <span
+                  className={`text-xs ${
+                    isActive
+                      ? 'text-slate-700 dark:text-slate-300 font-medium'
+                      : isPending
+                      ? 'text-slate-400 dark:text-slate-500'
+                      : 'text-slate-400 dark:text-slate-500'
+                  }`}
+                >
+                  {stage}
+                </span>
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>
   )
 }
-
 // ── Suggested questions ────────────────────────────────────────────────────
 
 const SUGGESTED_QUESTIONS = [
