@@ -30,8 +30,8 @@ function buildFreeSubscription(userId: string): Subscription {
   return {
     id: '',
     user_id: userId,
-    stripe_customer_id: null,
-    stripe_subscription_id: null,
+    paystack_customer_code: null,
+    paystack_subscription_code: null,
     status: 'free',
     price_id: null,
     tier: 'free' as SubscriptionTier,

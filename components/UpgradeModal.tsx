@@ -143,7 +143,7 @@ export function UpgradeModal({
           </div>
 
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            Starting at $29 / month. Cancel anytime.
+            Starting at NGN 15,000 / month. Cancel anytime.
           </p>
         </div>
 
@@ -153,7 +153,7 @@ export function UpgradeModal({
             onClick={onUpgrade}
             className="flex-1 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-sm font-semibold px-4 py-2.5 hover:bg-slate-700 dark:hover:bg-slate-200 transition-colors"
           >
-            Upgrade to Pro
+            Upgrade — NGN 15,000/mo
           </button>
           <button
             onClick={onClose}

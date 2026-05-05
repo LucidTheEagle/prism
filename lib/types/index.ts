@@ -372,18 +372,18 @@ export type AuditEventType =
 | 'subscription_change'
 
 export interface Subscription {
-id: string
-user_id: string
-stripe_customer_id: string | null
-stripe_subscription_id: string | null
-status: SubscriptionStatus
-price_id: string | null
-tier: SubscriptionTier
-current_period_start: string | null
-current_period_end: string | null
-cancel_at_period_end: boolean
-created_at: string
-updated_at: string
+  id: string
+  user_id: string
+  paystack_customer_code: string | null
+  paystack_subscription_code: string | null
+  status: SubscriptionStatus
+  price_id: string | null
+  tier: SubscriptionTier
+  current_period_start: string | null
+  current_period_end: string | null
+  cancel_at_period_end: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface UsageTracking {
@@ -444,9 +444,9 @@ export const TIER_LIMITS: Record<SubscriptionTier, {
 
 // Price ID constants — swap mock values for real Stripe price IDs at go-live
 export const PRICE_IDS = {
-free: process.env.STRIPE_PRICE_FREE ?? 'price_free_mock_2026',
-pro: process.env.STRIPE_PRICE_PRO ?? 'price_pro_mock_2026',
-enterprise: process.env.STRIPE_PRICE_ENTERPRISE ?? 'price_enterprise_mock_2026',
+  free: process.env.PAYSTACK_PLAN_FREE ?? 'plan_free_mock_2026',
+  pro: process.env.PAYSTACK_PLAN_PRO ?? 'plan_pro_mock_2026',
+  enterprise: process.env.PAYSTACK_PLAN_ENTERPRISE ?? 'plan_enterprise_mock_2026',
 } as const
 
 // ============================================================================

@@ -65,7 +65,7 @@ export default function BillingClient({
 
   const tier = subscription.tier
   const features = TIER_FEATURES[tier]
-  const hasBillingAccount = !!subscription.stripe_customer_id
+  const hasBillingAccount = !!subscription.paystack_customer_code
 
   async function handleUpgrade() {
     setLoading('checkout')
@@ -92,10 +92,13 @@ export default function BillingClient({
       const response = await fetch('/api/billing/create-portal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_status' }),
       })
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Failed to open billing portal')
-      window.location.href = data.url
+      if (!response.ok) throw new Error(data.error || 'Failed to retrieve subscription status.')
+      // No redirect — Paystack has no hosted portal.
+      // Status is returned directly. UI update handled by page refresh.
+      window.location.href = '/billing'
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
       setLoading(null)
@@ -181,7 +184,7 @@ export default function BillingClient({
               disabled={loading !== null}
               className="flex-1 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-sm font-semibold px-4 py-2.5 hover:bg-slate-700 dark:hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading === 'checkout' ? 'Redirecting...' : 'Upgrade to Solo Lawyer — $29/mo'}
+              {loading === 'checkout' ? 'Redirecting...' : 'Upgrade to Solo Lawyer — NGN 15,000/mo'}
             </button>
           )}
 
@@ -191,7 +194,7 @@ export default function BillingClient({
               disabled={loading !== null}
               className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading === 'portal' ? 'Redirecting...' : 'Manage billing'}
+              {loading === 'portal' ? 'Loading...' : 'Manage billing'}
             </button>
           )}
 
