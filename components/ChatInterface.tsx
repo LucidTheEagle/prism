@@ -246,7 +246,7 @@ export default function ChatInterface({
           setMessages(prev => prev.filter(m => m.id !== userMessage.id))
           return
         }
-        throw new Error(errData.error || 'Access denied')
+        throw new Error(errData.error || 'Access to this resource was denied. Please sign in again.')
       }
 
       if (!response.ok) {
@@ -273,7 +273,7 @@ export default function ChatInterface({
     } catch (error) {
       // Silent auto-retry — one automatic retry before surfacing any error
       try {
-        setSubmitError('Taking longer than usual — retrying automatically…')
+        setSubmitError('PRISM is taking longer than expected. Your document is secure. Retrying automatically.')
 
         const retryResponse = await fetch('/api/chat', {
           method: 'POST',
@@ -308,7 +308,7 @@ export default function ChatInterface({
         setMessages(prev => [...prev, {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: 'Unable to process your request. Please try again in a moment.',
+          content: 'PRISM is temporarily unavailable. Please try your query again in a few minutes. Your document and conversation history are secure.',
           timestamp: new Date(),
         }])
         console.error('[ChatInterface] Both attempts failed:', error)

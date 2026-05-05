@@ -342,7 +342,28 @@ export function ChatMessages({
                       {/* Answer body */}
                       <div className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base text-slate-900 dark:text-slate-100">
                         {message.content}
-                      </div>
+                      </div>                        
+
+                        {/* Silent state — verified absence block */}
+                        {message.epistemic_category === 'SILENT' && (
+                          <div
+                            className="mt-4 p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg"
+                            role="status"
+                            aria-label="Verified absence confirmation"
+                          >
+                            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">
+                              Verified Absence
+                            </p>
+                          <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                            PRISM conducted an exhaustive search across this document and confirmed this information is not present. This is a verified absence, not an error.
+                          </p>
+                          <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                              What you can do: rephrase your question, check a different document, or upload additional materials.
+                            </p>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Closing statement — Logos one-sentence actionable close */}
                       {message.closing_statement && (

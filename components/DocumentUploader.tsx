@@ -71,7 +71,7 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
         }, 500)
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
+      setError(err instanceof Error ? err.message : 'This document could not be processed. Please ensure it is a text-based PDF under 50MB and try again.')
       setIsUploading(false)
       setUploadProgress(0)
     }
@@ -263,7 +263,7 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
           />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-rose-700 dark:text-rose-400">
-              Upload failed
+              Upload could not be completed.
             </p>
             <p className="text-sm text-rose-600 dark:text-rose-400 mt-0.5">
               {error}
