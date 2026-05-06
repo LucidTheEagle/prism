@@ -33,19 +33,20 @@ export async function GET(
     }
 
     // ── Ownership check ───────────────────────────────────────────
+    // Demo documents are accessible to all authenticated users.
+    // Personal documents are strictly locked to their owner.
     const { data: document } = await supabaseAdmin
       .from('documents')
-      .select('id')
+      .select('id, user_id, is_demo')
       .eq('id', id)
-      .eq('user_id', user.id)
       .single()
-
-    if (!document) {
+      
+      if (!document || (!document.is_demo && document.user_id !== user.id)) {
       return NextResponse.json(
         { error: 'Document not found' },
         { status: 404 }
       )
-    }
+      }
 
     // ── Fetch messages scoped to this user ────────────────────────
     const { data: messages, error } = await supabaseAdmin
