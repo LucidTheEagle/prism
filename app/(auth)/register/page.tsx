@@ -146,12 +146,12 @@ export default function RegisterPage() {
           aria-label="Create your PRISM account"
         >
           <div className="mb-6 sm:mb-8 text-center">
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-50 mb-1">
-              Create your account
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Start analysing documents with AI precision
-            </p>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-50 mb-1">
+            Create your account
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Beta access is by invitation only. If you have received credentials, use the sign in page instead.
+          </p>
           </div>
 
           {error && (
@@ -166,31 +166,33 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <button
-            onClick={handleGoogleSignIn}
-            disabled={isAnyLoading}
-            aria-label="Continue with Google"
-            aria-busy={googleLoading}
-            aria-describedby={error ? errorId : undefined}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 min-h-[44px]"
-          >
-            {googleLoading
-              ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
-              : <GoogleIcon />
-            }
-            <span>{googleLoading ? 'Redirecting to Google…' : 'Continue with Google'}</span>
-          </button>
+          {/* Google OAuth — disabled during beta. Uncomment when Supabase plan is upgraded.
+<button
+  onClick={handleGoogleSignIn}
+  disabled={isAnyLoading}
+  aria-label="Continue with Google"
+  aria-busy={googleLoading}
+  aria-describedby={error ? errorId : undefined}
+  className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 min-h-[44px]"
+>
+  {googleLoading
+    ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+    : <GoogleIcon />
+  }
+  <span>{googleLoading ? 'Redirecting to Google…' : 'Continue with Google'}</span>
+</button>
 
-          <div className="relative my-5 sm:my-6" role="separator" aria-label="Or continue with email">
-            <div className="absolute inset-0 flex items-center" aria-hidden="true">
-              <div className="w-full border-t border-slate-200 dark:border-slate-700" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white dark:bg-slate-900 px-3 text-slate-500 dark:text-slate-400 tracking-wider">
-                or continue with email
-              </span>
-            </div>
-          </div>
+<div className="relative my-5 sm:my-6" role="separator" aria-label="Or continue with email">
+  <div className="absolute inset-0 flex items-center" aria-hidden="true">
+    <div className="w-full border-t border-slate-200 dark:border-slate-700" />
+  </div>
+  <div className="relative flex justify-center text-xs uppercase">
+    <span className="bg-white dark:bg-slate-900 px-3 text-slate-500 dark:text-slate-400 tracking-wider">
+      or continue with email
+    </span>
+  </div>
+</div>
+*/}
 
           <form
             onSubmit={handleRegister}
@@ -349,12 +351,12 @@ export default function RegisterPage() {
           </p>
 
           <p className="mt-3 sm:mt-4 text-center text-sm text-slate-500 dark:text-slate-400">
-            Already have an account?{' '}
+            Have credentials already?{' '}
             <Link
               href="/login"
               className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
             >
-              Sign in
+              Sign in here
             </Link>
           </p>
         </div>
