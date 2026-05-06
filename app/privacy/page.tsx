@@ -97,8 +97,24 @@ export default function PrivacyPage() {
         </section>
 
         <section>
+         <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-3">
+           7. Nigeria Data Protection Act 2023 Compliance
+         </h2>
+          <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+            PRISM processes all personal data in accordance with the Nigeria Data Protection Act 2023 (NDPA) and the General Application and Implementation Directive issued by the Nigeria Data Protection Commission (NDPC). Epopteia operates as a data controller in respect of account and usage data, and as a data processor in respect of documents you upload for analysis.
+          </p>
+          <ul className="mt-3 space-y-2 text-slate-600 dark:text-slate-400">
+            <li className="flex gap-2"><span className="text-emerald-500 shrink-0">·</span><strong className="text-slate-700 dark:text-slate-300">Lawful basis:</strong> Personal data is processed on the basis of contractual necessity — to provide the service you have signed up for.</li>
+            <li className="flex gap-2"><span className="text-emerald-500 shrink-0">·</span><strong className="text-slate-700 dark:text-slate-300">Data minimisation:</strong> Only the minimum personal data necessary to operate the service is collected and retained.</li>
+            <li className="flex gap-2"><span className="text-emerald-500 shrink-0">·</span><strong className="text-slate-700 dark:text-slate-300">Cross-border transfers:</strong> Document processing may involve transfer of data to AI infrastructure operated by Microsoft Azure and Google Cloud. Both providers operate under data processing agreements that comply with NDPA cross-border transfer requirements.</li>
+            <li className="flex gap-2"><span className="text-emerald-500 shrink-0">·</span><strong className="text-slate-700 dark:text-slate-300">Your rights:</strong> Under the NDPA, you have the right to access, rectify, object to processing of, and request erasure of your personal data. To exercise any of these rights, contact us at the address in Section 8.</li>
+            <li className="flex gap-2"><span className="text-emerald-500 shrink-0">·</span><strong className="text-slate-700 dark:text-slate-300">Data breach notification:</strong> In the event of a personal data breach affecting your data, we will notify you and the NDPC within 72 hours of becoming aware of the breach, in accordance with NDPA requirements.</li>
+          </ul>
+        </section>
+
+        <section>
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-3">
-            7. Contact
+            8. Contact
           </h2>
           <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
             For privacy-related enquiries or data deletion requests, contact Epopteia at{' '}

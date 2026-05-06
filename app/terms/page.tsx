@@ -77,7 +77,7 @@ export default function TermsPage() {
             6. Subscription and Billing
           </h2>
           <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-            PRISM offers free and paid subscription tiers. Paid subscriptions are billed monthly via Stripe. You may cancel at any time — cancellation takes effect at the end of the current billing period. We reserve the right to change pricing with 30 days&apos; notice to existing subscribers.
+            PRISM offers free and paid subscription tiers. Paid subscriptions are billed monthly via Paystack, a licensed payment processor regulated by the Central Bank of Nigeria. You may cancel at any time — cancellation takes effect at the end of the current billing period. We reserve the right to change pricing with 30 days&apos; notice to existing subscribers.
           </p>
         </section>
 
@@ -95,8 +95,35 @@ export default function TermsPage() {
         </section>
 
         <section>
+         <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-3">
+           8. Nigeria Data Protection Act 2023 Compliance
+         </h2>
+         <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+           PRISM processes personal data in accordance with the Nigeria Data Protection Act 2023 (NDPA) and the General Application and Implementation Directive issued by the Nigeria Data Protection Commission (NDPC). As a data controller, Epopteia collects only the minimum personal data necessary to provide the service, processes data on a lawful basis, and implements appropriate technical and organisational measures to protect personal data against unauthorised access, loss, or destruction. You have the right to access, rectify, and request erasure of your personal data at any time by contacting us at the address in Clause 14.
+         </p>
+       </section>       
+
+       <section>
+         <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-3">
+           9. Nigerian Bar Association AI Guidelines Compliance
+         </h2>
+         <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+          PRISM is designed and operated in accordance with the Nigerian Bar Association Guidelines for the Use of Artificial Intelligence in Legal Practice (September 2024). Specifically: PRISM maintains human oversight through its epistemic categorisation system, which classifies every answer as Explicitly Stated, Inferred, or Silent — ensuring lawyers verify AI outputs before reliance. PRISM maintains full transparency through its Glass Box citation architecture, which traces every answer to its exact source paragraph. PRISM never presents AI-generated content as legal advice. PRISM does not engage in any form of data mining or profiling of users.
+          </p>
+        </section>
+        
+        <section>
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-3">
-            8. Limitation of Liability
+            10. Professional Indemnity Position
+          </h2>
+          <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+            PRISM is a research assistance tool. All outputs must be verified by a qualified legal professional before use in legal proceedings, client advice, or any other consequential application. Epopteia accepts no liability for reliance on unverified AI-generated outputs. The NBA Guidelines explicitly require human oversight of AI outputs in legal practice — PRISM&apos;s architecture is designed to support and enforce this requirement at every stage of the pipeline.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-3">
+            11. Limitation of Liability
           </h2>
           <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
             To the maximum extent permitted by law, Epopteia shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of PRISM. Our total liability to you for any claim shall not exceed the amount you paid us in the 12 months preceding the claim.
@@ -105,7 +132,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-3">
-            9. Termination
+            12. Termination
           </h2>
           <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
             We reserve the right to suspend or terminate your account for violation of these terms. You may delete your account at any time from your Profile page. Upon deletion, all your data is permanently purged in accordance with our Privacy Policy.
@@ -114,7 +141,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-3">
-            10. Changes to Terms
+            13. Changes to Terms
           </h2>
           <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
             We may update these Terms from time to time. We will notify you of material changes by email or by a notice within PRISM. Continued use of the service after changes constitutes acceptance of the new terms.
@@ -123,7 +150,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-3">
-            11. Contact
+            14. Contact
           </h2>
           <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
             For questions about these Terms, contact Epopteia at{' '}
