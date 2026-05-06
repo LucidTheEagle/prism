@@ -57,7 +57,10 @@ export async function GET(
     }
 
     // ── 4. Ownership check ────────────────────────────────────────
-    if (document.user_id !== user.id) {
+    // Demo documents are accessible to all authenticated users.
+    // All other documents are strictly locked to their owner.
+    const isDemo = document.is_demo === true
+    if (!isDemo && document.user_id !== user.id) {
       // Return 404 not 403 — don't confirm the document exists
       // to users who don't own it (prevents enumeration attacks)
       return NextResponse.json(
